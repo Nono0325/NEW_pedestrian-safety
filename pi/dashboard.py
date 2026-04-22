@@ -4,6 +4,8 @@ import asyncio
 import cv2
 import httpx
 import socket
+from collections import deque
+from datetime import datetime
 from fastapi import FastAPI, Request, BackgroundTasks, Form
 from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
@@ -41,6 +43,13 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 frame_cache = {}
 status_cache = {}
 discovered_devices = [] # List of {"name": x, "ip": x}
+system_logs = deque(maxlen=50)
+
+def add_log(message: str):
+    timestamp = datetime.now().strftime("%H:%M:%S")
+    entry = f"[{timestamp}] {message}"
+    system_logs.append(entry)
+    print(entry)
 
 class CameraConfig(BaseModel):
     id: int
@@ -106,18 +115,18 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
                 
                 if not await asyncio.to_thread(cap.isOpened):
-                    print(f"⚠️ [CAM {cam_id}] 無法連上串流，將在 5 秒後重試...")
+                    add_log(f"⚠️ [CAM {cam_id}] 無法連上串流 ({ip})，將在 5 秒後重試...")
                     await asyncio.sleep(5)
                     continue
 
                 while await asyncio.to_thread(cap.isOpened):
                     ret, frame = await asyncio.to_thread(cap.read)
                     if not ret: 
-                        print(f"❌ [CAM {cam_id}] 影像讀取中斷...")
+                        add_log(f"❌ [CAM {cam_id}] 影像讀取中斷...")
                         break
                     
                     if first_frame:
-                        print(f"✅ [CAM {cam_id}] 成功抓取到首幀影像！路徑: {ip}")
+                        add_log(f"✅ [CAM {cam_id}] 成功連線！路徑: {ip}")
                         first_frame = False
 
                     frame = cv2.resize(frame, (640, 480))
@@ -225,6 +234,16 @@ async def gen_frames(cam_id: int):
 @app.get("/video_feed/{cam_id}")
 async def video_feed(cam_id: int):
     return StreamingResponse(gen_frames(cam_id), media_type="multipart/x-mixed-replace; boundary=frame")
+
+@app.get("/api/logs")
+async def get_logs():
+    return list(system_logs)
+
+@app.post("/api/restart")
+async def restart_fetchers():
+    add_log("🔄 系統正在重啟所有攝影機連線任務...")
+    start_all_fetchers()
+    return {"status": "restarting"}
 
 @app.get("/status")
 async def get_status():

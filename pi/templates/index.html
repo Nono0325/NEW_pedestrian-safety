@@ -79,6 +79,25 @@
 
         .rssi-bar { width: 40px; height: 4px; background: #333; border-radius: 2px; overflow: hidden; }
         .rssi-fill { height: 100%; background: var(--success); transition: 1s; }
+
+        /* Debug Console Styles */
+        .debug-console {
+            position: fixed; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.9);
+            border-top: 1px solid var(--accent); padding: 10px 20px; z-index: 1000;
+            max-height: 200px; overflow-y: auto; display: none;
+            box-shadow: 0 -10px 30px rgba(0,0,0,0.5);
+        }
+        .console-header { 
+            display: flex; justify-content: space-between; align-items: center; 
+            margin-bottom: 8px; font-size: 0.8rem; font-weight: 600; color: var(--accent);
+        }
+        .log-list { font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; color: #aaa; list-style: none; }
+        .log-item { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; }
+        .log-toggle { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 0.8rem; }
+        .btn-restart { 
+            background: var(--danger); color: white; border: none; padding: 4px 10px; 
+            border-radius: 4px; cursor: pointer; font-size: 0.75rem; 
+        }
     </style>
 </head>
 <body>
@@ -130,6 +149,25 @@
         </div>
         {% endfor %}
     </main>
+
+    <div class="debug-console" id="debugConsole">
+        <div class="console-header">
+            <span>💻 系統診斷控制台 (Live Logs)</span>
+            <div style="display: flex; gap: 15px; align-items: center;">
+                <button class="btn-restart" onclick="restartFetchers()">一鍵重連所有攝影機</button>
+                <button class="log-toggle" onclick="toggleConsole()">[收合]</button>
+            </div>
+        </div>
+        <ul class="log-list" id="logList">
+            <li class="log-item">正在初始化除錯日誌...</li>
+        </ul>
+    </div>
+
+    <div style="position: fixed; bottom: 20px; right: 20px;">
+        <button onclick="toggleConsole()" style="background: var(--accent); color: #000; border: none; padding: 10px 20px; border-radius: 30px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(255,179,0,0.4);">
+            🛠️ 系統除錯
+        </button>
+    </div>
 
     <script>
         let alarmStates = {};
@@ -187,6 +225,33 @@
         }
         setInterval(updateStatus, 2000);
         updateStatus();
+
+        // Debug Console Logic
+        let consoleVisible = false;
+        function toggleConsole() {
+            consoleVisible = !consoleVisible;
+            document.getElementById('debugConsole').style.display = consoleVisible ? 'block' : 'none';
+        }
+
+        async function updateLogs() {
+            try {
+                const resp = await fetch('/api/logs');
+                const logs = await resp.json();
+                const logList = document.getElementById('logList');
+                logList.innerHTML = logs.map(l => `<li class="log-item">${l}</li>`).join('');
+                if (consoleVisible) logList.scrollTop = logList.scrollHeight;
+            } catch (e) {}
+        }
+
+        async function restartFetchers() {
+            if (!confirm("確定要重啟所有攝影機連線任務嗎？")) return;
+            try {
+                await fetch('/api/restart', { method: 'POST' });
+            } catch (e) {}
+        }
+
+        setInterval(updateLogs, 3000);
+        updateLogs();
     </script>
 </body>
 </html>
