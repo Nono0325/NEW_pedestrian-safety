@@ -126,16 +126,21 @@ def start_all_fetchers():
         task = asyncio.create_task(fetch_camera_data(cam["id"], cam["ip"]))
         active_tasks.append(task)
 
-@app.on_event("startup")
-async def startup_event():
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
     global zc_instance
     start_all_fetchers()
     zc_instance = start_mdns_discovery()
-
-@app.on_event("shutdown")
-def shutdown_event():
+    yield
     if zc_instance:
         zc_instance.close()
+
+app = FastAPI(
+    title="One Step Ahead Dashboard",
+    lifespan=lifespan
+)
 
 # ===================
 # ENDPOINTS
