@@ -14,6 +14,7 @@
             --success: #00e676;
             --text: #e0e0e0;
             --info: #00f2ff;
+            --card-width: 400px;
         }
 
         * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Outfit', sans-serif; }
@@ -33,7 +34,7 @@
         .settings-btn:hover { background: var(--accent); color: #000; }
 
         .dashboard-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 1.5rem;
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--card-width), 1fr)); gap: 1.5rem;
         }
 
         .camera-card {
@@ -108,7 +109,13 @@
         <div>
             <h1>先行一步：斑馬線智慧預警看板</h1>
         </div>
-        <a href="/settings" class="settings-btn">系統配置 (Settings)</a>
+        <div style="display: flex; gap: 20px; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px; background: var(--glass); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05);">
+                <span style="font-size: 0.8rem; opacity: 0.7;">縮放</span>
+                <input type="range" min="180" max="800" value="400" id="scaleSlider" oninput="updateScale(this.value)" style="cursor: pointer; accent-color: var(--accent);">
+            </div>
+            <a href="/settings" class="settings-btn">系統配置 (Settings)</a>
+        </div>
     </header>
 
     <main class="dashboard-grid">
@@ -264,6 +271,11 @@
 
         setInterval(updateLogs, 3000);
         updateLogs();
+
+        // Scale Control Logic
+        function updateScale(val) {
+            document.documentElement.style.setProperty('--card-width', val + 'px');
+        }
     </script>
 </body>
 </html>
