@@ -45,11 +45,23 @@ status_cache = {}
 discovered_devices = [] # List of {"name": x, "ip": x}
 system_logs = deque(maxlen=50)
 
-def add_log(message: str):
+def add_log(message: str, level: str = "INFO"):
     timestamp = datetime.now().strftime("%H:%M:%S")
-    entry = f"[{timestamp}] {message}"
+    entry = {"time": timestamp, "msg": message, "level": level}
     system_logs.append(entry)
-    print(entry)
+    print(f"[{timestamp}] {level}: {message}")
+
+async def check_tcp_port(ip: str, port: int, timeout: float = 1.0) -> bool:
+    """底層 TCP 探測，確認通訊埠是否開放"""
+    try:
+        reader, writer = await asyncio.wait_for(
+            asyncio.open_connection(ip, port), timeout=timeout
+        )
+        writer.close()
+        await writer.wait_closed()
+        return True
+    except:
+        return False
 
 class CameraConfig(BaseModel):
     id: int
@@ -98,35 +110,50 @@ async def fetch_camera_data(cam_id: int, ip: str):
     async def poll_status():
         async with httpx.AsyncClient() as client:
             while True:
+                start_time = asyncio.get_event_loop().time()
                 try:
                     resp = await client.get(status_url, timeout=2.0)
+                    latency = int((asyncio.get_event_loop().time() - start_time) * 1000)
                     if resp.status_code == 200:
-                        status_cache[cam_id] = resp.json()
-                except:
-                    status_cache.pop(cam_id, None)
+                        data = resp.json()
+                        data["latency"] = latency
+                        data["tcp"] = "OPEN"
+                        status_cache[cam_id] = data
+                    else:
+                        add_log(f"🔥 [CAM {cam_id}] 認證失敗或回應異常: HTTP {resp.status_code}", "ERROR")
+                        status_cache[cam_id] = {"error": f"HTTP {resp.status_code}", "tcp": "OPEN"}
+                except Exception as e:
+                    status_cache[cam_id] = {"error": "Timeout", "tcp": "CLOSED"}
                 await asyncio.sleep(3)
 
     async def poll_video():
         first_frame = True
         while True:
             try:
-                # 使用執行緒開啟捕捉
+                # 1. 第一步：先進行極細 TCP 探測
+                is_port_open = await check_tcp_port(ip, 80)
+                if not is_port_open:
+                    add_log(f"⚠️ [CAM {cam_id}] TCP 握手失敗 (Port 80 被防火牆或路徑阻斷)", "WARN")
+                    await asyncio.sleep(5)
+                    continue
+
+                # 2. 第二步：開啟串流
                 cap = await asyncio.to_thread(cv2.VideoCapture, stream_url)
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
                 
                 if not await asyncio.to_thread(cap.isOpened):
-                    add_log(f"⚠️ [CAM {cam_id}] 無法連上串流 ({ip})，將在 5 秒後重試...")
+                    add_log(f"⚠️ [CAM {cam_id}] 影像串流開啟失敗 (可能認證無效或封包被過濾)", "WARN")
                     await asyncio.sleep(5)
                     continue
 
                 while await asyncio.to_thread(cap.isOpened):
                     ret, frame = await asyncio.to_thread(cap.read)
                     if not ret: 
-                        add_log(f"❌ [CAM {cam_id}] 影像讀取中斷...")
+                        add_log(f"❌ [CAM {cam_id}] 串流訊號中斷 (可能是網路不穩或 ESP 重啟)", "ERROR")
                         break
                     
                     if first_frame:
-                        add_log(f"✅ [CAM {cam_id}] 成功連線！路徑: {ip}")
+                        add_log(f"✅ [CAM {cam_id}] 影像解碼成功！通訊穩定。", "INFO")
                         first_frame = False
 
                     frame = cv2.resize(frame, (640, 480))
@@ -251,10 +278,16 @@ async def get_status():
     for cam in config["cameras"]:
         cam_id = cam["id"]
         online = cam_id in frame_cache
-        data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0, "alarm": 0})
+        data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0, "alarm": 0, "tcp": "UNKNOWN", "latency": -1})
         combined_status.append({
-            "id": cam_id, "online": online, "rssi": data["rssi"], "uptime": data["uptime"],
-            "sensor": data["sensor"], "alarm": data["alarm"]
+            "id": cam_id, 
+            "online": online, 
+            "rssi": data.get("rssi", 0), 
+            "uptime": data.get("uptime", 0),
+            "sensor": data.get("sensor", 0.0), 
+            "alarm": data.get("alarm", 0),
+            "tcp": data.get("tcp", "UNKNOWN"),
+            "latency": data.get("latency", -1)
         })
     return combined_status
 

@@ -93,6 +93,9 @@
         }
         .log-list { font-family: 'Courier New', Courier, monospace; font-size: 0.8rem; color: #aaa; list-style: none; }
         .log-item { margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 2px; }
+        .log-info { color: var(--success); opacity: 0.8; }
+        .log-warn { color: var(--accent); font-weight: 600; }
+        .log-error { color: var(--danger); font-weight: 600; text-transform: uppercase; }
         .log-toggle { border: none; background: none; color: var(--accent); cursor: pointer; font-size: 0.8rem; }
         .btn-restart { 
             background: var(--danger); color: white; border: none; padding: 4px 10px; 
@@ -133,16 +136,16 @@
                         <span id="rssi-val-{{ cam.id }}">-- dBm</span>
                     </div>
                     <div class="data-item">
-                        <span class="data-label">更新</span>
-                        <span id="uptime-{{ cam.id }}">--s</span>
+                        <span class="data-label">延遲</span>
+                        <span id="latency-{{ cam.id }}" style="color: var(--success)">-- ms</span>
+                    </div>
+                    <div class="data-item">
+                        <span class="data-label">TCP 80</span>
+                        <span id="tcp-{{ cam.id }}">掃描中...</span>
                     </div>
                     <div class="data-item">
                         <span class="data-label">警示</span>
                         <span id="alarm-state-{{ cam.id }}">靜止</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">偵測</span>
-                        <span id="sensor-{{ cam.id }}">-- V</span>
                     </div>
                 </div>
             </div>
@@ -188,12 +191,18 @@
                     const badge = document.getElementById('badge-' + cam.id);
                     const rssiFill = document.getElementById('rssi-' + cam.id);
                     const rssiVal = document.getElementById('rssi-val-' + cam.id);
-                    const uptime = document.getElementById('uptime-' + cam.id);
-                    const sensor = document.getElementById('sensor-' + cam.id);
+                    const tcpStatus = document.getElementById('tcp-' + cam.id);
+                    const latencyVal = document.getElementById('latency-' + cam.id);
                     const hazardBtn = document.getElementById('hazard-' + cam.id);
                     const stateLabel = document.getElementById('alarm-state-' + cam.id);
                     
                     alarmStates[cam.id] = cam.alarm;
+
+                    // Update TCP & Latency
+                    tcpStatus.innerText = cam.tcp === 'OPEN' ? '🟢 開放' : (cam.tcp === 'CLOSED' ? '🔴 阻斷' : '🟡 偵測中');
+                    tcpStatus.style.color = cam.tcp === 'OPEN' ? 'var(--success)' : 'var(--danger)';
+                    latencyVal.innerText = cam.latency >= 0 ? cam.latency + ' ms' : '-- ms';
+                    latencyVal.style.color = cam.latency < 100 ? 'var(--success)' : (cam.latency < 300 ? 'var(--accent)' : 'var(--danger)');
 
                     if (cam.online) {
                         badge.className = 'status-badge online';
@@ -238,7 +247,10 @@
                 const resp = await fetch('/api/logs');
                 const logs = await resp.json();
                 const logList = document.getElementById('logList');
-                logList.innerHTML = logs.map(l => `<li class="log-item">${l}</li>`).join('');
+                logList.innerHTML = logs.map(l => {
+                    const levelClass = `log-${l.level.toLowerCase()}`;
+                    return `<li class="log-item ${levelClass}">[${l.time}] ${l.msg}</li>`;
+                }).join('');
                 if (consoleVisible) logList.scrollTop = logList.scrollHeight;
             } catch (e) {}
         }
