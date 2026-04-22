@@ -293,6 +293,7 @@ async def get_status():
         data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0, "alarm": 0, "tcp": "UNKNOWN", "latency": -1})
         combined_status.append({
             "id": cam_id, 
+            "ip": cam["ip"],
             "online": online, 
             "rssi": data.get("rssi", 0), 
             "uptime": data.get("uptime", 0),

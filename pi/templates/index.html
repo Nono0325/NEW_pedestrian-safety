@@ -220,18 +220,20 @@
                     const badge = document.getElementById('badge-' + cam.id);
                     const rssiFill = document.getElementById('rssi-' + cam.id);
                     const rssiVal = document.getElementById('rssi-val-' + cam.id);
-                    const alarmStates = {}; // Should be defined outside or handled as global
+                    const tcpStatus = document.getElementById('tcp-' + cam.id);
+                    const latencyVal = document.getElementById('latency-' + cam.id);
+                    const hazardBtn = document.getElementById('hazard-' + cam.id);
+                    const stateLabel = document.getElementById('alarm-state-' + cam.id);
                     const directLink = document.getElementById('direct-' + cam.id);
                     
-                    // Update Direct Link URL
-                    // Note: We need the IP from the 'cam' object from Jinja or reconstruct it
-                    // For simplicity, we'll assign it in the loop
-                    directLink.onclick = () => {
-                        const win = window.open(`http://${cam.ip}/stream?auth=${API_KEY}`, '_blank');
-                        win.focus();
-                    };
+                    if (!tcpStatus || !latencyVal) return; // Skip if card not fully rendered
 
-                    // Update TCP & Latency
+                    alarmStates[cam.id] = cam.alarm;
+                    
+                    // Update Direct Link URL if IP exists
+                    if (directLink && cam.ip) {
+                        directLink.onclick = () => openDirect(cam.ip);
+                    }
                     tcpStatus.innerText = cam.tcp === 'OPEN' ? '🟢 開放' : (cam.tcp === 'CLOSED' ? '🔴 阻斷' : '🟡 偵測中');
                     tcpStatus.style.color = cam.tcp === 'OPEN' ? 'var(--success)' : 'var(--danger)';
                     latencyVal.innerText = cam.latency >= 0 ? cam.latency + ' ms' : '-- ms';
