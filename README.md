@@ -1,6 +1,12 @@
 # 先行一步 (One Step Ahead)
 ### 單鏡頭 AI 行人意圖辨識與斑馬線 LED 預警系統
 
+## 🚀 一鍵部署 (Raspberry Pi 5)
+在您的 Raspberry Pi 終端機執行以下指令即可自動安裝所有依賴環境：
+```bash
+curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/install.sh | bash
+```
+
 本專案旨在參與「115年人本環境全國大專院校學生競賽」，透過邊緣運算 (Edge AI) 技術提升校園與社區行穿線的安全性。
 
 ## 系統架構
