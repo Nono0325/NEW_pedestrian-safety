@@ -98,7 +98,11 @@ def main():
     tracker_logic = PedestrianTracker()
     
     cap = cv2.VideoCapture(STREAM_URL)
-    print("AI Integrated System Running...")
+    # Set connection timeout to 10 seconds (default is 30s)
+    cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
+    
+    print(f"Connecting to: {STREAM_URL}")
+    print("AI Integrated System Running... Press Ctrl+C to stop.")
 
     while True:
         tracker_logic.reset_alarm_if_needed()
