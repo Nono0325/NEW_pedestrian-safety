@@ -203,7 +203,7 @@
 
         function openDirect(ip) {
             if (!ip) return;
-            const url = `http://${ip}/stream?auth=nono_safety_sec_2026`;
+            const url = `http://${ip}/stream?auth=${API_KEY}`;
             window.open(url, '_blank');
         }
 

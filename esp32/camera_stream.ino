@@ -40,7 +40,8 @@ bool check_auth(httpd_req_t *req) {
       }
     }
   }
-  Serial.println("Unauthorized access attempt!");
+  Serial.print("Unauthorized access attempt! Key was: ");
+  Serial.println(buf);
   httpd_resp_set_status(req, "401 Unauthorized");
   httpd_resp_send(req, "401 Unauthorized: Invalid API Key", -1);
   return false;
@@ -164,8 +165,8 @@ void setup() {
   config.pin_reset = RESET_GPIO_NUM;
   config.xclk_freq_hz = 20000000;
   config.pixel_format = PIXFORMAT_JPEG;
-  config.frame_size = FRAMESIZE_VGA;
-  config.jpeg_quality = 12;
+  config.frame_size = FRAMESIZE_QVGA; // Lowered to 320x240 for stability
+  config.jpeg_quality = 15; // Higher compression to reduce ERR_EMPTY_RESPONSE
   Serial.println("Initialzing ESP32-CAM Safety System...");
   
   pinMode(ALARM_PIN, OUTPUT);
