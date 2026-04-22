@@ -142,7 +142,19 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
                 
                 if not await asyncio.to_thread(cap.isOpened):
-                    add_log(f"⚠️ [CAM {cam_id}] 影像串流開啟失敗 (可能認證無效或封包被過濾)", "WARN")
+                    # 深度探測原因
+                    async with httpx.AsyncClient() as client:
+                        try:
+                            probe = await client.get(stream_url, timeout=3.0)
+                            if probe.status_code == 401:
+                                add_log(f"🔥 [CAM {cam_id}] 認證失敗：API Key 不正確！請檢查設定。", "ERROR")
+                            elif probe.status_code == 503:
+                                add_log(f"🔥 [CAM {cam_id}] 設備忙碌：可能有其他裝置正在監看。", "WARN")
+                            else:
+                                add_log(f"⚠️ [CAM {cam_id}] 影像流拒絕連線 (HTTP {probe.status_code})", "WARN")
+                        except:
+                            add_log(f"⚠️ [CAM {cam_id}] 影像流開啟超時 (可能是網路被過濾)", "WARN")
+                    
                     await asyncio.sleep(5)
                     continue
 
