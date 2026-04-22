@@ -34,12 +34,16 @@
         .settings-btn:hover { background: var(--accent); color: #000; }
 
         .dashboard-grid {
-            display: grid; grid-template-columns: repeat(auto-fit, minmax(var(--card-width), 1fr)); gap: 1.5rem;
+            display: grid; 
+            grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr)); 
+            gap: 1.5rem;
+            justify-content: center;
         }
 
         .camera-card {
             background: var(--glass); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 16px; overflow: hidden; transition: 0.3s; position: relative;
+            width: 100%; max-width: var(--card-width); margin: 0 auto;
         }
         .camera-card:hover { transform: translateY(-5px); border-color: var(--accent); }
 
