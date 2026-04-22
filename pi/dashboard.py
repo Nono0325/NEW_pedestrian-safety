@@ -3,11 +3,13 @@ import json
 import asyncio
 import cv2
 import httpx
+import socket
 from fastapi import FastAPI, Request, BackgroundTasks, Form
-from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import StreamingResponse, HTMLResponse
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
+from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
 
 # ===================
 # CONFIG & INIT
@@ -25,6 +27,7 @@ templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "t
 # Global State
 frame_cache = {}
 status_cache = {}
+discovered_devices = [] # List of {"name": x, "ip": x}
 
 class CameraConfig(BaseModel):
     id: int
@@ -33,6 +36,35 @@ class CameraConfig(BaseModel):
 
 class SettingsUpdate(BaseModel):
     cameras: List[CameraConfig]
+
+# ===================
+# MDNS DISCOVERY
+# ===================
+class MDNSListener(ServiceListener):
+    def add_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        info = zc.get_service_info(type_, name)
+        if info:
+            addresses = [".".join(map(str, addr)) for addr in info.addresses]
+            if addresses:
+                ip = addresses[0]
+                # Only add if it looks like our safety cam
+                if "esp32-safety" in name:
+                    device = {"name": name.split(".")[0], "ip": ip}
+                    if device not in discovered_devices:
+                        discovered_devices.append(device)
+                        print(f"Discovered via mDNS: {device}")
+
+    def update_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        pass
+
+    def remove_service(self, zc: Zeroconf, type_: str, name: str) -> None:
+        pass
+
+def start_mdns_discovery():
+    zeroconf = Zeroconf()
+    listener = MDNSListener()
+    browser = ServiceBrowser(zeroconf, "_http._tcp.local.", listener)
+    return zeroconf
 
 # ===================
 # BACKGROUND TASKS
@@ -71,11 +103,11 @@ async def fetch_camera_data(cam_id: int, ip: str):
     await asyncio.gather(poll_status(), poll_video())
 
 active_tasks = []
+zc_instance = None
 
 def start_all_fetchers():
     global active_tasks
-    for task in active_tasks:
-        task.cancel()
+    for task in active_tasks: task.cancel()
     active_tasks = []
     for cam in config["cameras"]:
         task = asyncio.create_task(fetch_camera_data(cam["id"], cam["ip"]))
@@ -83,7 +115,14 @@ def start_all_fetchers():
 
 @app.on_event("startup")
 async def startup_event():
+    global zc_instance
     start_all_fetchers()
+    zc_instance = start_mdns_discovery()
+
+@app.on_event("shutdown")
+def shutdown_event():
+    if zc_instance:
+        zc_instance.close()
 
 # ===================
 # ENDPOINTS
@@ -112,19 +151,21 @@ async def update_settings(data: SettingsUpdate):
     start_all_fetchers()
     return {"status": "ok"}
 
+@app.get("/scan")
+async def scan_devices():
+    """Returns the list of discovered devices."""
+    return discovered_devices
+
 @app.post("/control/{cam_id}/{state}")
 async def control_led(cam_id: int, state: str):
-    # Find camera IP
     cam = next((c for c in config["cameras"] if c["id"] == cam_id), None)
-    if not cam: return {"status": "error", "message": "Camera not found"}
-    
-    target_url = f"http://{cam['ip']}/led?state={state}"
+    if not cam: return {"status": "error"}
+    target_url = f"http://{cam['ip']}/alarm?state={state}"
     async with httpx.AsyncClient() as client:
         try:
             resp = await client.get(target_url, timeout=2.0)
-            return {"status": "ok", "response": resp.text}
-        except Exception as e:
-            return {"status": "error", "message": str(e)}
+            return {"status": "ok"}
+        except: return {"status": "error"}
 
 async def gen_frames(cam_id: int):
     while True:
@@ -135,8 +176,7 @@ async def gen_frames(cam_id: int):
 
 @app.get("/video_feed/{cam_id}")
 async def video_feed(cam_id: int):
-    return StreamingResponse(gen_frames(cam_id), 
-                             media_type="multipart/x-mixed-replace; boundary=frame")
+    return StreamingResponse(gen_frames(cam_id), media_type="multipart/x-mixed-replace; boundary=frame")
 
 @app.get("/status")
 async def get_status():
@@ -144,14 +184,10 @@ async def get_status():
     for cam in config["cameras"]:
         cam_id = cam["id"]
         online = cam_id in frame_cache
-        data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0, "led": 0})
+        data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0, "alarm": 0})
         combined_status.append({
-            "id": cam_id,
-            "online": online,
-            "rssi": data["rssi"],
-            "uptime": data["uptime"],
-            "sensor": data["sensor"],
-            "led": data["led"]
+            "id": cam_id, "online": online, "rssi": data["rssi"], "uptime": data["uptime"],
+            "sensor": data["sensor"], "alarm": data["alarm"]
         })
     return combined_status
 

@@ -1,9 +1,10 @@
 /*
- * ESP32-CAM MJPEG Stream, Status & Crosswalk Alarm Server
+ * ESP32-CAM MJPEG Stream, Status & Crosswalk Alarm Server with mDNS Discovery
  */
 
 #include "esp_camera.h"
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include "esp_http_server.h"
 
 // ===================
@@ -15,8 +16,8 @@ const char* password = "YOUR_WIFI_PASSWORD";
 #define CAMERA_MODEL_AI_THINKER
 #include "camera_pins.h"
 
-#define ALARM_PIN 13 // Physical Crosswalk LED (Recommended)
-#define FLASH_PIN 4  // Internal Flash
+#define ALARM_PIN 13 // Physical Crosswalk LED
+#define FLASH_PIN 4 
 
 httpd_handle_t stream_httpd = NULL;
 
@@ -86,9 +87,7 @@ esp_err_t stream_handler(httpd_req_t *req){
 void setup() {
     Serial.begin(115200);
     pinMode(ALARM_PIN, OUTPUT);
-    pinMode(FLASH_PIN, OUTPUT);
     digitalWrite(ALARM_PIN, LOW);
-    digitalWrite(FLASH_PIN, LOW); // Keep flash off
     
     camera_config_t config;
     config.ledc_channel = LEDC_CHANNEL_0;
@@ -115,11 +114,17 @@ void setup() {
     config.jpeg_quality = 12;
     config.fb_count = 2;
 
-    esp_err_t err = esp_camera_init(&config);
-    if (err != ESP_OK) return;
+    esp_camera_init(&config);
 
     WiFi.begin(ssid, password);
     while (WiFi.status() != WL_CONNECTED) delay(500);
+
+    // Setup mDNS Discovery
+    String hostname = "esp32-safety-" + String((uint32_t)ESP.getEfuseMac(), HEX);
+    if (MDNS.begin(hostname.c_str())) {
+        MDNS.addService("http", "tcp", 80);
+        Serial.printf("mDNS Responder Started: %s.local\n", hostname.c_str());
+    }
 
     httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
     http_config.server_port = 80;
