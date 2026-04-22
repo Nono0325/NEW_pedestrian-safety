@@ -313,6 +313,7 @@ async def get_status():
 
 if __name__ == "__main__":
     import os
+    import uvicorn
     try:
         uvicorn.run(app, host="0.0.0.0", port=config.get("server", {}).get("port", 8000), log_level="info")
     except KeyboardInterrupt:
