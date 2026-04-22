@@ -166,13 +166,35 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_VGA;
   config.jpeg_quality = 12;
-  config.fb_count = 2;
+  Serial.println("Initialzing ESP32-CAM Safety System...");
+  
+  pinMode(ALARM_PIN, OUTPUT);
+  digitalWrite(ALARM_PIN, LOW); // LED OFF during init
 
-  esp_camera_init(&config);
+  esp_err_t err = esp_camera_init(&config);
+  if (err != ESP_OK) {
+    Serial.printf("Camera init failed with error 0x%x\n", err);
+    // If camera fails, blink the LED to signal hardware error
+    while (true) {
+      digitalWrite(ALARM_PIN, HIGH); delay(100);
+      digitalWrite(ALARM_PIN, LOW); delay(100);
+    }
+  }
+  Serial.println("Camera OK!");
 
+  Serial.printf("Connecting to WiFi: %s\n", ssid);
   WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED)
+  while (WiFi.status() != WL_CONNECTED) {
     delay(500);
+    Serial.print(".");
+  }
+  Serial.println("");
+  Serial.println("WiFi Connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
+
+  pinMode(ALARM_PIN, OUTPUT);
+  digitalWrite(ALARM_PIN, LOW);
 
   // Setup mDNS Discovery
   String hostname = "esp32-safety-" + String((uint32_t)ESP.getEfuseMac(), HEX);
@@ -184,6 +206,14 @@ void setup() {
   httpd_config_t http_config = HTTPD_DEFAULT_CONFIG();
   http_config.server_port = 80;
 
+  httpd_uri_t index_uri = {.uri = "/",
+                            .method = HTTP_GET,
+                            .handler = index_handler,
+                            .user_ctx = NULL};
+  httpd_uri_t favicon_uri = {.uri = "/favicon.ico",
+                             .method = HTTP_GET,
+                             .handler = favicon_handler,
+                             .user_ctx = NULL};
   httpd_uri_t stream_uri = {.uri = "/stream",
                             .method = HTTP_GET,
                             .handler = stream_handler,
@@ -197,10 +227,14 @@ void setup() {
                            .handler = alarm_handler,
                            .user_ctx = NULL};
 
+  Serial.println("Starting web server on port: '80'");
   if (httpd_start(&stream_httpd, &http_config) == ESP_OK) {
+    httpd_register_uri_handler(stream_httpd, &index_uri);
+    httpd_register_uri_handler(stream_httpd, &favicon_uri);
     httpd_register_uri_handler(stream_httpd, &stream_uri);
     httpd_register_uri_handler(stream_httpd, &status_uri);
     httpd_register_uri_handler(stream_httpd, &alarm_uri);
+    Serial.println("Web server started successfully!");
   }
 }
 

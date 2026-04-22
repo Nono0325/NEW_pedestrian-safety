@@ -100,15 +100,24 @@ async def fetch_camera_data(cam_id: int, ip: str):
     async def poll_video():
         while True:
             try:
-                cap = cv2.VideoCapture(stream_url)
-                while cap.isOpened():
-                    ret, frame = cap.read()
+                # 使用執行緒開啟捕捉，避免阻塞事件迴圈 (解決 Ctrl+C 卡死)
+                cap = await asyncio.to_thread(cv2.VideoCapture, stream_url)
+                # 設定連線逾時為 5 秒
+                await asyncio.to_thread(cap.set, cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+                
+                while await asyncio.to_thread(cap.isOpened):
+                    # 使用執行緒讀取畫面
+                    ret, frame = await asyncio.to_thread(cap.read)
                     if not ret: break
+                    
                     frame = cv2.resize(frame, (640, 480))
                     _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
                     frame_cache[cam_id] = buffer.tobytes()
                     await asyncio.sleep(1/15)
-                cap.release()
+                
+                await asyncio.to_thread(cap.release)
+            except asyncio.CancelledError:
+                break
             except:
                 frame_cache.pop(cam_id, None)
                 await asyncio.sleep(5)
@@ -134,8 +143,12 @@ async def lifespan(app: FastAPI):
     start_all_fetchers()
     zc_instance = start_mdns_discovery()
     yield
+    # 徹底清除後台任務，確保 Ctrl+C 能瞬間關閉
     if zc_instance:
         zc_instance.close()
+    for task in active_tasks:
+        task.cancel()
+    print("\n系統正在安全關閉...")
 
 app = FastAPI(
     title="One Step Ahead Dashboard",
