@@ -9,15 +9,17 @@ from utils import HomographyTransformer, calculate_velocity, is_approaching_curb
 # CONFIGURATION
 # ===================
 # 預設指向第一個攝影機或本地模擬器位址 (127.0.0.1:8080)
-# 正式部署請修改 pi/config.json 中的 IP 配置
-DEFAULT_TARGET_IP = "192.168.1.101" 
-ALARM_DURATION    = 5  # 警示燈亮燈秒數 (秒)
-MODEL_PATH        = "yolov8n.pt"
-
-# Load security key from config
+# Load configuration
 with open("pi/config.json", "r") as f:
-    config_sec = json.load(f)
-    API_KEY = config_sec.get("security", {}).get("api_key", "")
+    config_data = json.load(f)
+    API_KEY = config_data.get("security", {}).get("api_key", "")
+    # Use the first configured camera IP, or fallback to mock address
+    DEFAULT_TARGET_IP = config_data["cameras"][0]["ip"] if config_data.get("cameras") else "127.0.0.1:8080"
+
+# Derived URLs
+STREAM_URL = f"http://{DEFAULT_TARGET_IP}/stream?auth={API_KEY}"
+ALARM_URL = f"http://{DEFAULT_TARGET_IP}/alarm"
+MODEL_PATH = "yolov8n.pt"
 
 # Homography Calibration (場域校正坐標)
 SRC_PTS = [[0, 480], [640, 480], [640, 0], [0, 0]]
