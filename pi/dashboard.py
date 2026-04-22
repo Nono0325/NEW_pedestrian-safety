@@ -165,17 +165,19 @@ async def favicon():
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
-    return templates.TemplateResponse("index.html", {
-        "request": request,
-        "cameras": config["cameras"]
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="index.html",
+        context={"cameras": config["cameras"]}
+    )
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
-    return templates.TemplateResponse("settings.html", {
-        "request": request,
-        "cameras": config["cameras"]
-    })
+    return templates.TemplateResponse(
+        request=request,
+        name="settings.html",
+        context={"cameras": config["cameras"]}
+    )
 
 @app.post("/settings")
 async def update_settings(data: SettingsUpdate):
