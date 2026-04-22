@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>先行一步 - 系統設定</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #0a0e14;
+            --glass: rgba(255, 255, 255, 0.05);
+            --accent: #00f2ff;
+            --text: #e0e0e0;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Outfit', sans-serif;
+            padding: 2rem;
+            background: radial-gradient(circle at top right, #1a2a3a, var(--bg));
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 3rem;
+        }
+
+        .glass-card {
+            background: var(--glass);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px;
+            padding: 2rem;
+            margin-bottom: 2rem;
+        }
+
+        h2 { color: var(--accent); margin-bottom: 1.5rem; }
+
+        .cam-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr 100px;
+            gap: 1rem;
+            margin-bottom: 1rem;
+            align-items: center;
+        }
+
+        input {
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            padding: 8px 12px;
+            border-radius: 8px;
+            outline: none;
+        }
+
+        input:focus { border-color: var(--accent); }
+
+        .btn {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+            font-weight: 600;
+            transition: 0.3s;
+        }
+
+        .btn-primary { background: var(--accent); color: #000; }
+        .btn-danger { background: rgba(255, 75, 92, 0.2); color: #ff4b5c; border: 1px solid #ff4b5c; }
+        
+        .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+
+        .nav-link { color: var(--text); text-decoration: none; opacity: 0.6; transition: 0.3s; }
+        .nav-link:hover { opacity: 1; color: var(--accent); }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>系統管理中心</h1>
+            <a href="/" class="nav-link">← 返回分析儀表板</a>
+        </header>
+
+        <section class="glass-card">
+            <h2>攝影機配置 (最多 5 台)</h2>
+            <form id="config-form">
+                <div id="camera-list">
+                    {% for cam in cameras %}
+                    <div class="cam-row" id="row-{{ loop.index0 }}">
+                        <input type="text" name="name_{{ loop.index0 }}" value="{{ cam.name }}" placeholder="位置名稱">
+                        <input type="text" name="ip_{{ loop.index0 }}" value="{{ cam.ip }}" placeholder="IP 位址">
+                        <button type="button" class="btn btn-danger" onclick="removeRow({{ loop.index0 }})">移除</button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+                    <button type="button" class="btn" style="background: #333; color: #fff;" onclick="addRow()">+ 新增攝影機</button>
+                    <button type="submit" class="btn btn-primary">儲存所有設定</button>
+                </div>
+            </form>
+        </section>
+    </div>
+
+    <script>
+        let rowCount = {{ cameras|length }};
+
+        function addRow() {
+            if (rowCount >= 5) { alert("最多僅支援 5 台攝影機"); return; }
+            const container = document.getElementById('camera-list');
+            const div = document.createElement('div');
+            div.className = 'cam-row';
+            div.id = `row-${rowCount}`;
+            div.innerHTML = `
+                <input type="text" name="name_${rowCount}" placeholder="新位置名稱">
+                <input type="text" name="ip_${rowCount}" placeholder="192.168.1.xxx">
+                <button type="button" class="btn btn-danger" onclick="removeRow(${rowCount})">移除</button>
+            `;
+            container.appendChild(div);
+            rowCount++;
+        }
+
+        function removeRow(id) {
+            const row = document.getElementById(`row-${id}`);
+            row.remove();
+        }
+
+        document.getElementById('config-form').onsubmit = async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const data = [];
+            
+            // Re-organize into cameras array
+            const entries = Array.from(formData.entries());
+            for(let i=0; i<5; i++) {
+                const name = formData.get(`name_${i}`);
+                const ip = formData.get(`ip_${i}`);
+                if (name && ip) {
+                    data.push({ id: i+1, name, ip });
+                }
+            }
+
+            try {
+                const response = await fetch('/settings', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cameras: data })
+                });
+                if (response.ok) {
+                    alert("設定已儲存！系統正在重新導入...");
+                    window.location.href = "/";
+                }
+            } catch (err) {
+                alert("儲存失敗");
+            }
+        };
+    </script>
+</body>
+</html>

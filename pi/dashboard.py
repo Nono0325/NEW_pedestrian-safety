@@ -3,65 +3,94 @@ import json
 import asyncio
 import cv2
 import httpx
-from fastapi import FastAPI, Request, BackgroundTasks
-from fastapi.responses import StreamingResponse, HTMLResponse
+from fastapi import FastAPI, Request, BackgroundTasks, Form
+from fastapi.responses import StreamingResponse, HTMLResponse, RedirectResponse
 from fastapi.templating import Jinja2Templates
-from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from typing import List
 
 # ===================
 # CONFIG & INIT
 # ===================
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
-with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-    config = json.load(f)
 
+def load_config():
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+config = load_config()
 app = FastAPI(title="先行一步 AI 監控儀表板")
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
-# Global Frame Cache
+# Global State
 # camera_id -> b'jpeg_bytes'
 frame_cache = {}
+# camera_id -> {"rssi": -x, "uptime": x, "sensor": x.x}
+status_cache = {}
+
+class CameraConfig(BaseModel):
+    id: int
+    name: str
+    ip: str
+
+class SettingsUpdate(BaseModel):
+    cameras: List[CameraConfig]
 
 # ===================
 # BACKGROUND TASKS
 # ===================
-async def fetch_frames(cam_id: int, stream_url: str):
-    """Background task to fetch frames from an ESP32-CAM MJPEG stream."""
-    print(f"Starting fetcher for Cam {cam_id} at {stream_url}")
+async def fetch_camera_data(cam_id: int, ip: str):
+    """Fetcher for both MJPEG stream and JSON status."""
+    stream_url = f"http://{ip}/stream"
+    status_url = f"http://{ip}/status"
     
-    # We use OpenCV or HTTPX to pull the stream. 
-    # For a relay, HTTPX is often more manageable for MJPEG headers.
-    async with httpx.AsyncClient() as client:
+    print(f"Fetcher started: Cam {cam_id} ({ip})")
+    
+    async def poll_status():
+        async with httpx.AsyncClient() as client:
+            while True:
+                try:
+                    resp = await client.get(status_url, timeout=2.0)
+                    if resp.status_code == 200:
+                        status_cache[cam_id] = resp.json()
+                except:
+                    status_cache.pop(cam_id, None)
+                await asyncio.sleep(3)
+
+    async def poll_video():
         while True:
             try:
-                # Direct relay or frame capture. 
-                # Simplest for relay is using OpenCV in a thread if needed, 
-                # but let's try a direct request if IP is MJPEG.
-                async with client.stream("GET", stream_url, timeout=None) as response:
-                    # Note: Parsings multipart MJPEG manually is tricky.
-                    # As a prototype, we'll use OpenCV's backend for simplicity 
-                    # in a separate thread-executor if needed.
-                    cap = cv2.VideoCapture(stream_url)
-                    while cap.isOpened():
-                        ret, frame = cap.read()
-                        if not ret: break
-                        
-                        # Downsample for dashboard efficiency
-                        frame = cv2.resize(frame, (640, 480))
-                        _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                        frame_cache[cam_id] = buffer.tobytes()
-                        
-                        await asyncio.sleep(1/15) # Cap at 15 FPS
-                    cap.release()
-            except Exception as e:
-                print(f"Error fetching Cam {cam_id}: {e}")
-                await asyncio.sleep(5) # Retry delay
+                cap = cv2.VideoCapture(stream_url)
+                while cap.isOpened():
+                    ret, frame = cap.read()
+                    if not ret: break
+                    frame = cv2.resize(frame, (640, 480))
+                    _, buffer = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
+                    frame_cache[cam_id] = buffer.tobytes()
+                    await asyncio.sleep(1/15)
+                cap.release()
+            except:
+                frame_cache.pop(cam_id, None)
+                await asyncio.sleep(5)
+    
+    await asyncio.gather(poll_status(), poll_video())
+
+# Task management
+active_tasks = []
+
+def start_all_fetchers():
+    global active_tasks
+    for task in active_tasks:
+        task.cancel()
+    active_tasks = []
+    
+    for cam in config["cameras"]:
+        task = asyncio.create_task(fetch_camera_data(cam["id"], cam["ip"]))
+        active_tasks.append(task)
 
 @app.on_event("startup")
 async def startup_event():
-    for cam in config["cameras"]:
-        stream_url = f"http://{cam['ip']}/stream"
-        asyncio.create_task(fetch_frames(cam["id"], stream_url))
+    start_all_fetchers()
 
 # ===================
 # ENDPOINTS
@@ -74,15 +103,29 @@ async def index(request: Request):
         "cameras": config["cameras"]
     })
 
+@app.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    return templates.TemplateResponse("settings.html", {
+        "request": request,
+        "cameras": config["cameras"]
+    })
+
+@app.post("/settings")
+async def update_settings(data: SettingsUpdate):
+    global config
+    config["cameras"] = [cam.dict() for cam in data.cameras]
+    with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2, ensure_ascii=False)
+    
+    # Reload fetchers
+    start_all_fetchers()
+    return {"status": "ok"}
+
 async def gen_frames(cam_id: int):
     while True:
         if cam_id in frame_cache:
-            frame = frame_cache[cam_id]
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        else:
-            # Placeholder "offline" frame logic could go here
-            await asyncio.sleep(1)
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame_cache[cam_id] + b'\r\n')
         await asyncio.sleep(1/20)
 
 @app.get("/video_feed/{cam_id}")
@@ -92,16 +135,19 @@ async def video_feed(cam_id: int):
 
 @app.get("/status")
 async def get_status():
-    status_list = []
+    combined_status = []
     for cam in config["cameras"]:
-        online = cam["id"] in frame_cache
-        status_list.append({
-            "id": cam["id"],
-            "name": cam["name"],
+        cam_id = cam["id"]
+        online = cam_id in frame_cache
+        data = status_cache.get(cam_id, {"rssi": 0, "uptime": 0, "sensor": 0.0})
+        combined_status.append({
+            "id": cam_id,
             "online": online,
-            "ip": cam["ip"]
+            "rssi": data["rssi"],
+            "uptime": data["uptime"],
+            "sensor": data["sensor"]
         })
-    return status_list
+    return combined_status
 
 if __name__ == "__main__":
     import uvicorn
