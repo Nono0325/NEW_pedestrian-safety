@@ -8,20 +8,24 @@ from utils import HomographyTransformer, calculate_velocity, is_approaching_curb
 # ===================
 # CONFIGURATION
 # ===================
-ESP32_IP = "192.168.1.101" # Will use camera 1 from config as default or auto
-STREAM_URL = f"http://{ESP32_IP}/stream"
-ALARM_URL = f"http://{ESP32_IP}/alarm"
-MODEL_PATH = "yolov8n.pt"
+# 預設指向第一個攝影機或本地模擬器位址 (127.0.0.1:8080)
+# 正式部署請修改 pi/config.json 中的 IP 配置
+DEFAULT_TARGET_IP = "192.168.1.101" 
+ALARM_DURATION    = 5  # 警示燈亮燈秒數 (秒)
+MODEL_PATH        = "yolov8n.pt"
 
-# Homography Calibration
+# Homography Calibration (場域校正坐標)
 SRC_PTS = [[0, 480], [640, 480], [640, 0], [0, 0]]
 DST_PTS = [[0, 5],   [5, 5],     [5, 0],   [0, 0]]
 
-# Thresholds
-INTENT_THRESHOLD_DIST = 1.0
-INTENT_THRESHOLD_VEL  = 0.5
-INTENT_MIN_FRAMES     = 5
-ALARM_DURATION        = 5 # Seconds
+# Thresholds (辨識門檻)
+INTENT_THRESHOLD_DIST = 1.0 # 距離門檻 (米)
+INTENT_THRESHOLD_VEL  = 0.5 # 速度門檻 (m/s)
+INTENT_MIN_FRAMES     = 5   # 最少持續偵測幀數
+
+# Derived URLs
+STREAM_URL = f"http://{DEFAULT_TARGET_IP}/stream"
+ALARM_URL = f"http://{DEFAULT_TARGET_IP}/alarm"
 
 class PedestrianTracker:
     def __init__(self):

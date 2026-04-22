@@ -10,8 +10,14 @@ echo "-------------------------------------------------------"
 echo "開始部署: 單鏡頭 AI 行人意圖辨識與斑馬線 LED 預警系統"
 echo "-------------------------------------------------------"
 
-# 1. 更新系統與安裝必要套件
-echo "[1/4] 正在更新系統並安裝必要的硬體套件..."
+# 1. 系統檢查與更新
+echo "[1/4] 正在檢查環境與安裝必要的硬體套件..."
+
+# 檢查是否為 Raspberry Pi
+if [ ! -f /etc/rpi-issue ]; then
+    echo "警告: 本系統偵測到不屬於 Raspberry Pi 環境，部分硬體依賴(如 lgpio) 可能會安裝失敗。"
+fi
+
 sudo apt-get update -y
 sudo apt-get install -y python3-venv python3-pip liblgpio-dev python3-opencv git libgl1
 
