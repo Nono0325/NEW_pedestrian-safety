@@ -97,6 +97,23 @@ def main():
     transformer = HomographyTransformer(SRC_PTS, DST_PTS)
     tracker_logic = PedestrianTracker()
     
+    # --- 新增連線自我檢測 ---
+    print(f"正在診斷連線: {DEFAULT_TARGET_IP} ...")
+    try:
+        test_url = f"http://{DEFAULT_TARGET_IP}/status?auth={API_KEY}"
+        resp = requests.get(test_url, timeout=5)
+        if resp.status_code == 200:
+            print(f"✅ 連線成功！伺服器回應: {resp.text}")
+        elif resp.status_code == 401:
+            print(f"❌ 認證失敗 (401)！請檢查 pi/config.json 與 ESP32 secrets.h 的 API 金鑰是否一致。")
+            return
+        else:
+            print(f"⚠️ 伺服器回傳異常狀態碼: {resp.status_code}")
+    except requests.exceptions.RequestException as e:
+        print(f"❌ 無法連線到 ESP32: {e}")
+        print(f"請確保 ESP32 已開啟並在同一個 Wi-Fi 下 (嘗試 Ping {DEFAULT_TARGET_IP})。")
+        return
+
     cap = cv2.VideoCapture(STREAM_URL)
     # Set connection timeout to 10 seconds (default is 30s)
     cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 10000)
