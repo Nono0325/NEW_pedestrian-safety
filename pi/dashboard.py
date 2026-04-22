@@ -10,6 +10,7 @@ from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
 from typing import List
 from zeroconf import ServiceBrowser, Zeroconf, ServiceListener
+from fastapi.middleware.cors import CORSMiddleware
 
 # ===================
 # CONFIG & INIT
@@ -22,6 +23,16 @@ def load_config():
 
 config = load_config()
 app = FastAPI(title="先行一步 AI 監控儀表板")
+
+# Add CORS Middleware to prevent fetch errors
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 templates = Jinja2Templates(directory=os.path.join(os.path.dirname(__file__), "templates"))
 
 # Global State
@@ -127,6 +138,10 @@ def shutdown_event():
 # ===================
 # ENDPOINTS
 # ===================
+
+@app.get("/favicon.ico")
+async def favicon():
+    return StreamingResponse(iter([]), status_code=204)
 
 @app.get("/", response_class=HTMLResponse)
 async def index(request: Request):
