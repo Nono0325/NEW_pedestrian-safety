@@ -182,7 +182,7 @@ async def settings_page(request: Request):
 @app.post("/settings")
 async def update_settings(data: SettingsUpdate):
     global config
-    config["cameras"] = [cam.dict() for cam in data.cameras]
+    config["cameras"] = [cam.model_dump() for cam in data.cameras]
     with open(CONFIG_PATH, "w", encoding="utf-8") as f:
         json.dump(config, f, indent=2, ensure_ascii=False)
     start_all_fetchers()
