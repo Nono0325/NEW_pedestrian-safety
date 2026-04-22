@@ -19,7 +19,7 @@ if [ ! -f /etc/rpi-issue ]; then
 fi
 
 sudo apt-get update -y
-sudo apt-get install -y python3-venv python3-pip liblgpio-dev python3-opencv git libgl1
+sudo apt-get install -y python3-venv python3-pip python3-dev swig liblgpio-dev python3-opencv git libgl1
 
 # 建立必要目錄
 mkdir -p pi/templates
