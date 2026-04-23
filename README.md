@@ -33,7 +33,7 @@
 | :--- | :--- | :--- |
 | **Raspberry Pi 5** | 核心運算與管理站 | 8GB RAM, 建議搭配散熱風扇 |
 | **ESP32-CAM** | 邊緣影像與 LED 控制站 | AI-Thinker 模組 |
-| **LED 警示模組** | 行人警示顯示 | 5V/12V LED Strip (接 GPIO 13) |
+| **LED 警示模組** | 行人警示顯示 | 5V/12V LED Strip (接 **GPIO 12**) |
 | **外殼/支架** | 硬體防護與固定 | 建議高度 3.5m - 5m |
 
 ---
@@ -53,7 +53,7 @@ curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/inst
 1. 使用 Arduino IDE 開啟 `esp32/camera_stream.ino`。
 2. 修改程式碼中的 `Wi-Fi SSID` 與 `Password`。
 3. 開發板選擇 `AI Thinker ESP32-CAM` 並燒錄。
-4. **硬體接線**：將 LED 警示燈接在 **GPIO 13**。
+4. **硬體接線**：將 LED 警示燈接在 **GPIO 12** (避開 SD 卡衝突)。
 
 ---
 
