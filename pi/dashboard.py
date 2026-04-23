@@ -1,5 +1,6 @@
 import os
 import json
+import subprocess
 import asyncio
 import cv2
 import httpx
@@ -309,6 +310,23 @@ async def get_net_info():
         "local_ip": get_local_ip(),
         "hostname": socket.gethostname()
     }
+
+@app.get("/api/wifi_status")
+async def get_wifi_status():
+    """獲取 Pi 的 Wi-Fi AP 狀態 (僅限 Linux)"""
+    if os.name == 'nt':
+        return {"mode": "Simulation", "ssid": "OneStepAhead_AP (MOCK)", "clients": 0}
+        
+    try:
+        # 獲取當前啟用的 SSID
+        res = subprocess.check_output(["nmcli", "-t", "-f", "ACTIVE,SSID,MODE", "dev", "wifi"], text=True, stderr=subprocess.DEVNULL)
+        for line in res.splitlines():
+            if line.startswith("yes"):
+                parts = line.split(":")
+                return {"mode": parts[2], "ssid": parts[1], "clients": "N/A"}
+        return {"mode": "Disconnected", "ssid": "None", "clients": 0}
+    except:
+        return {"mode": "Unknown", "ssid": "None", "clients": 0}
 
 @app.get("/api/ping/{target}")
 async def ping_target(target: str):
