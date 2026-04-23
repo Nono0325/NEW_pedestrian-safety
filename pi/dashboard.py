@@ -51,8 +51,8 @@ def add_log(message: str, level: str = "INFO"):
     system_logs.append(entry)
     print(f"[{timestamp}] {level}: {message}")
 
-async def check_tcp_port(host_port: str, default_port: int = 80, timeout: float = 1.0) -> bool:
-    """底層 TCP 探測，支援 '192.168.1.102' 或 '127.0.0.1:8080' 格式"""
+async def check_tcp_port(host_port: str, default_port: int = 80, timeout: float = 3.0):
+    """底層 TCP 探測，返回 (success, message)"""
     try:
         if ":" in host_port:
             host, port_str = host_port.split(":")
@@ -66,9 +66,13 @@ async def check_tcp_port(host_port: str, default_port: int = 80, timeout: float 
         )
         writer.close()
         await writer.wait_closed()
-        return True
-    except:
-        return False
+        return True, "OPEN"
+    except asyncio.TimeoutError:
+        return False, "Timeout"
+    except ConnectionRefusedError:
+        return False, "Refused (Busy)"
+    except Exception as e:
+        return False, f"Err: {str(e)[:20]}"
 
 def get_local_ip():
     """獲取當前設備在區域網路中的 IP"""
@@ -130,7 +134,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
             while True:
                 start_time = asyncio.get_event_loop().time()
                 try:
-                    resp = await client.get(status_url, timeout=2.0)
+                    resp = await client.get(status_url, timeout=3.0)
                     latency = int((asyncio.get_event_loop().time() - start_time) * 1000)
                     if resp.status_code == 200:
                         data = resp.json()
@@ -138,48 +142,41 @@ async def fetch_camera_data(cam_id: int, ip: str):
                         data["tcp"] = "OPEN"
                         status_cache[cam_id] = data
                     else:
-                        add_log(f"🔥 [CAM {cam_id}] 認證失敗或回應異常: HTTP {resp.status_code}", "ERROR")
+                        add_log(f"🔥 [CAM {cam_id}] 認證失敗: HTTP {resp.status_code}", "ERROR")
                         status_cache[cam_id] = {"error": f"HTTP {resp.status_code}", "tcp": "OPEN"}
-                except Exception as e:
+                except Exception:
                     status_cache[cam_id] = {"error": "Timeout", "tcp": "CLOSED"}
-                await asyncio.sleep(3)
+                await asyncio.sleep(5) # 降低頻率從 3s -> 5s
 
     async def poll_video():
-        first_frame = True
+        reconnect_delay = 5
         while True:
+            cap = None
             try:
                 # 1. 第一步：先進行極細 TCP 探測 (自動處理 Port)
-                is_port_open = await check_tcp_port(ip, 80)
+                is_port_open, msg = await check_tcp_port(ip, 80)
                 if not is_port_open:
-                    add_log(f"⚠️ [CAM {cam_id}] TCP 握手失敗 (IP: {ip} 無回應)", "WARN")
-                    await asyncio.sleep(5)
+                    add_log(f"⚠️ [CAM {cam_id}] TCP 連線異常 ({msg})", "WARN")
+                    await asyncio.sleep(min(reconnect_delay, 60))
+                    reconnect_delay *= 2
                     continue
-
+                
+                reconnect_delay = 5 # 連線成功後重設延遲
+                
                 # 2. 第二步：開啟串流
                 cap = await asyncio.to_thread(cv2.VideoCapture, stream_url)
                 await asyncio.to_thread(cap.set, cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
                 
                 if not await asyncio.to_thread(cap.isOpened):
-                    # 深度探測原因
-                    async with httpx.AsyncClient() as client:
-                        try:
-                            probe = await client.get(stream_url, timeout=3.0)
-                            if probe.status_code == 401:
-                                add_log(f"🔥 [CAM {cam_id}] 認證失敗：API Key 不正確！請檢查設定。", "ERROR")
-                            elif probe.status_code == 503:
-                                add_log(f"🔥 [CAM {cam_id}] 設備忙碌：可能有其他裝置正在監看。", "WARN")
-                            else:
-                                add_log(f"⚠️ [CAM {cam_id}] 影像流拒絕連線 (HTTP {probe.status_code})", "WARN")
-                        except:
-                            add_log(f"⚠️ [CAM {cam_id}] 影像流開啟超時 (可能是網路被過濾)", "WARN")
-                    
-                    await asyncio.sleep(5)
+                    add_log(f"⚠️ [CAM {cam_id}] 影像流開啟超時 (可能設備忙碌)", "WARN")
+                    await asyncio.sleep(10)
                     continue
 
+                first_frame = True
                 while await asyncio.to_thread(cap.isOpened):
                     ret, frame = await asyncio.to_thread(cap.read)
                     if not ret: 
-                        add_log(f"❌ [CAM {cam_id}] 串流訊號中斷 (可能是網路不穩或 ESP 重啟)", "ERROR")
+                        add_log(f"❌ [CAM {cam_id}] 串流訊號中斷", "ERROR")
                         break
                     
                     if first_frame:
@@ -191,13 +188,15 @@ async def fetch_camera_data(cam_id: int, ip: str):
                     frame_cache[cam_id] = buffer.tobytes()
                     await asyncio.sleep(1/15)
                 
-                await asyncio.to_thread(cap.release)
             except asyncio.CancelledError:
-                break
+                break # 正常關閉
             except Exception as e:
-                print(f"🔥 [CAM {cam_id}] 發生錯誤: {e}")
+                add_log(f"🔥 [CAM {cam_id}] 執行緒發生錯誤: {str(e)[:30]}", "ERROR")
                 frame_cache.pop(cam_id, None)
                 await asyncio.sleep(5)
+            finally:
+                if cap:
+                    await asyncio.to_thread(cap.release)
     
     await asyncio.gather(poll_status(), poll_video())
 
@@ -221,7 +220,7 @@ async def lifespan(app: FastAPI):
     zc_instance = start_mdns_discovery()
     yield
     # Shutdown
-    add_log("🛑 系統正在關閉...", "WARN")
+    add_log("🛑 系統正在關閉背景任務...", "WARN")
     if zc_instance:
         zc_instance.close()
     
@@ -229,8 +228,8 @@ async def lifespan(app: FastAPI):
         task.cancel()
     
     if active_tasks:
-        # 給予 1 秒的時間嘗試優雅關閉，否則直接進到主程序的 os._exit
-        await asyncio.wait(active_tasks, timeout=1.0)
+        # 使用 return_exceptions=True 避免在 gather 時拋出 CancelledError 導致中斷
+        await asyncio.gather(*active_tasks, return_exceptions=True)
     
     print("✅ 資源已釋放。")
 
@@ -314,8 +313,8 @@ async def get_net_info():
 @app.get("/api/ping/{target}")
 async def ping_target(target: str):
     """測試到目標 IP 的 TCP 連通性"""
-    success = await check_tcp_port(target, 80, timeout=2.0)
-    return {"status": "success" if success else "failed", "target": target}
+    success, msg = await check_tcp_port(target, 80, timeout=3.0)
+    return {"status": "success" if success else "failed", "message": msg, "target": target}
 
 @app.post("/api/restart")
 async def restart_fetchers():
@@ -346,9 +345,27 @@ async def get_status():
 if __name__ == "__main__":
     import os
     import uvicorn
+    import signal
+
+    port = config.get("server", {}).get("port", 8000)
+    
+    # 建立 Uvicorn 配置
+    uv_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
+    server = uvicorn.Server(uv_config)
+
+    # 覆寫信號處理，避免顯示雜亂的 Traceback
+    def handle_exit(sig, frame):
+        print("\n\n[INFO] 偵測到中斷信號，正在優雅關閉系統...")
+        # 建立一個 Task 來關閉 Server
+        asyncio.create_task(server.shutdown())
+
+    signal.signal(signal.SIGINT, handle_exit)
+    signal.signal(signal.SIGTERM, handle_exit)
+
     try:
-        uvicorn.run(app, host="0.0.0.0", port=config.get("server", {}).get("port", 8000), log_level="info")
-    except KeyboardInterrupt:
-        print("\n\n[FORCE] 偵測到使用者中斷 (Ctrl+C)，正在強制關閉系統...")
-        # 直接結束進程，不再等候卡住的執行緒
+        asyncio.run(server.serve())
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    finally:
+        print("✅ 系統已結束。")
         os._exit(0)

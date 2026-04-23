@@ -147,7 +147,7 @@
                 if(data.status === "success") {
                     alert(`✅ 連線成功！ ${target} 可正常通訊。`);
                 } else {
-                    alert(`❌ 連線失敗！ ${target} 無法回應，請確認設備已開啟且在同一個網段。`);
+                    alert(`❌ 連線失敗！\n原因: ${data.message}\n請檢查設備是否在同一個網段，或是否有其他裝置佔用連線。`);
                 }
             } catch(e) { alert("連線測試發生錯誤"); }
             finally { btn.innerText = originalText; }
