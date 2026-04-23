@@ -22,8 +22,14 @@ from fastapi.middleware.cors import CORSMiddleware
 CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.json")
 
 def load_config():
-    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
+    if not os.path.exists(CONFIG_PATH):
+        return {"cameras": [], "security": {"api_key": "nono_safety_sec_2026"}}
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            return json.load(f)
+    except Exception as e:
+        print(f"⚠️ [CONFIG] 無法讀取設定檔: {e}")
+        return {"cameras": [], "security": {"api_key": "nono_safety_sec_2026"}}
 
 config = load_config()
 API_KEY = config.get("security", {}).get("api_key", "")
@@ -190,19 +196,28 @@ async def fetch_camera_data(cam_id: int, ip: str):
                                     jpg = buffer[a:b+2]
                                     buffer = buffer[b+2:]
                                     
-                                    # 解碼與縮放
-                                    nparr = np.frombuffer(jpg, np.uint8)
-                                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                                    if frame is not None:
-                                        frame = cv2.resize(frame, (640, 480))
-                                        _, buffer_jpg = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
-                                        frame_cache[cam_id] = buffer_jpg.tobytes()
+                                    # 解碼與處理 (使用 Executor 避免阻塞 Event Loop)
+                                    loop = asyncio.get_event_loop()
+                                    # 將 CPU 密集型操作外包給執行緒池
+                                    frame = await loop.run_in_executor(None, lambda: cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR))
                                     
-                                    await asyncio.sleep(0.001) # 給予系統喘息空間
+                                    if frame is not None:
+                                        h, w = frame.shape[:2]
+                                        if w == 640 and h == 480:
+                                            # 如果解析度已經是 640x480，直接存入快取，省去重新編碼的 CPU
+                                            frame_cache[cam_id] = jpg
+                                        else:
+                                            # 否則才進行縮放與編碼
+                                            frame = await loop.run_in_executor(None, lambda: cv2.resize(frame, (640, 480)))
+                                            success, buffer_jpg = await loop.run_in_executor(None, lambda: cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80]))
+                                            if success:
+                                                frame_cache[cam_id] = buffer_jpg.tobytes()
+                                    
+                                    await asyncio.sleep(0.001) 
                                 else:
                                     break
                                     
-                            if len(buffer) > 1000000: # 緩衝區保護
+                            if len(buffer) > 500000: # 緩衝區保護，降低至 0.5MB
                                 buffer = b""
             
             except asyncio.CancelledError:
@@ -379,39 +394,28 @@ if __name__ == "__main__":
     import signal
 
     port = config.get("server", {}).get("port", 8000)
-    
-    # 建立 Uvicorn 配置
     uv_config = uvicorn.Config(app, host="0.0.0.0", port=port, log_level="info")
     server = uvicorn.Server(uv_config)
 
-    # 覆寫信號處理，避免顯示雜亂的 Traceback
+    # 簡單的二次 Ctrl+C 強制結束機制
     shutdown_calls = 0
     def handle_exit(sig, frame):
         global shutdown_calls, is_shutting_down
         shutdown_calls += 1
         is_shutting_down = True
         if shutdown_calls > 1:
-            print("\n[FORCE] 偵測到多次中斷，立即強制退出進程...")
+            print("\n[FORCE] 強制退出進程...")
             os._exit(1)
-        
-        print("\n\n[INFO] 正在優雅關閉系統資源 (再按一次 Ctrl+C 可強制退出)...")
-        # 建立一個 Task 來關閉 Server
-        try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(server.shutdown())
-            else:
-                os._exit(0)
-        except:
-            os._exit(0)
+        print("\n\n[INFO] 正在關閉系統資源 (再按一次 Ctrl+C 可強制退出)...")
+        asyncio.create_task(server.shutdown())
 
-    signal.signal(signal.SIGINT, handle_exit)
-    signal.signal(signal.SIGTERM, handle_exit)
+    # 註冊信號
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, handle_exit)
 
     try:
         asyncio.run(server.serve())
     except (KeyboardInterrupt, asyncio.CancelledError):
         pass
     finally:
-        print("✅ 系統已結束。")
         os._exit(0)
