@@ -280,7 +280,7 @@ async def index(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"cameras": config["cameras"]}
+        context={"cameras": config["cameras"], "API_KEY": API_KEY}
     )
 
 @app.get("/settings", response_class=HTMLResponse)
