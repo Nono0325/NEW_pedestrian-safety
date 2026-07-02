@@ -1,248 +1,572 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-    <meta charset="UTF-8">
-    <title>先行一步 - 系統設定</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0a0e14;
-            --glass: rgba(255, 255, 255, 0.05);
-            --accent: #ffb300;
-            --info: #00f2ff;
-            --text: #e0e0e0;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>先行一步 - 系統配置中心</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:       #0f1117;
+      --surface:  #161b27;
+      --surface2: #1c2333;
+      --border:   #232d42;
+      --border2:  #2d3a52;
+      --text:     #e2e8f0;
+      --muted:    #64748b;
+      --accent:   #3b82f6;
+      --accent2:  #60a5fa;
+      --green:    #22c55e;
+      --amber:    #f59e0b;
+      --red:      #ef4444;
+      --info:     #06b6d4;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-        body {
-            background-color: var(--bg); color: var(--text); font-family: 'Outfit', sans-serif;
-            padding: 2rem; background: radial-gradient(circle at top right, #1a2a3a, var(--bg));
-            min-height: 100vh;
-        }
+    /* ── TOPBAR ── */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15,17,23,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo { display: flex; align-items: center; gap: 12px; }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--info));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -.02em; }
+    .logo-sub  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .topbar-btn {
+      background: var(--surface); border: 1px solid var(--border);
+      color: var(--text); padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; font-weight: 500; text-decoration: none;
+      transition: all .15s; cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .topbar-btn:hover { background: var(--surface2); border-color: var(--border2); }
+    .topbar-btn.primary {
+      background: var(--accent); border-color: var(--accent); color: #fff;
+    }
+    .topbar-btn.primary:hover { background: #2563eb; }
 
-        .container { max-width: 900px; margin: 0 auto; }
-        header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; }
+    /* ── BREADCRUMB ── */
+    .breadcrumb {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 28px;
+      font-size: 12px; color: var(--muted);
+      display: flex; align-items: center; gap: 6px;
+    }
+    .breadcrumb a { color: var(--muted); text-decoration: none; }
+    .breadcrumb a:hover { color: var(--text); }
+    .breadcrumb .sep { opacity: .4; }
+    .breadcrumb .current { color: var(--text); font-weight: 500; }
 
-        .glass-card {
-            background: var(--glass); backdrop-filter: blur(15px); border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 20px; padding: 2rem; margin-bottom: 2rem;
-        }
+    /* ── PAGE LAYOUT ── */
+    .page { max-width: 900px; margin: 0 auto; padding: 32px 28px; }
 
-        h2 { color: var(--info); margin-bottom: 1.5rem; display: flex; align-items: center; gap: 10px; }
+    /* ── PAGE TITLE ── */
+    .page-title {
+      font-size: 20px; font-weight: 700; letter-spacing: -.02em;
+      margin-bottom: 4px;
+    }
+    .page-desc { font-size: 13px; color: var(--muted); margin-bottom: 28px; }
 
-        .cam-row {
-            display: grid; grid-template-columns: 1fr 1.5fr 100px; gap: 1rem;
-            margin-bottom: 1rem; align-items: center;
-        }
+    /* ── SECTION CARD ── */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .card-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface2);
+    }
+    .card-title {
+      font-size: 13px; font-weight: 700;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .card-title .icon { font-size: 14px; }
+    .card-body { padding: 20px; }
+    .card-footer {
+      padding: 14px 20px;
+      border-top: 1px solid var(--border);
+      background: rgba(28,35,51,.4);
+      display: flex; gap: 10px; align-items: center;
+    }
 
-        input {
-            background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white; padding: 10px 15px; border-radius: 10px; outline: none;
-        }
-        input:focus { border-color: var(--info); }
+    /* ── NETWORK INFO BAR ── */
+    .net-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      flex-wrap: wrap; gap: 12px;
+    }
+    .net-chips { display: flex; gap: 10px; flex-wrap: wrap; }
+    .net-chip {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 6px; padding: 6px 12px;
+      font-size: 12px; font-family: 'JetBrains Mono', monospace;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .net-chip .label { color: var(--muted); font-family: 'Inter', sans-serif; }
+    .tcp-row { display: flex; gap: 8px; align-items: center; }
+    .result-badge {
+      font-size: 12px; font-weight: 600; padding: 4px 10px; border-radius: 4px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .result-badge.ok      { background: rgba(34,197,94,.15);  color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+    .result-badge.fail    { background: rgba(239,68,68,.15);  color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+    .result-badge.pending { background: rgba(100,116,139,.1); color: var(--muted); border: 1px solid var(--border); }
 
-        .btn {
-            padding: 10px 20px; border-radius: 10px; border: none; cursor: pointer;
-            font-weight: 600; transition: 0.3s; display: inline-flex; align-items: center; gap: 8px;
-        }
-        .btn-primary { background: var(--info); color: #000; }
-        .btn-outline { background: transparent; border: 1px solid var(--info); color: var(--info); }
-        .btn-danger { background: rgba(255, 75, 92, 0.1); color: #ff4b5c; border: 1px solid #ff4b5c; }
-        .btn:hover { opacity: 0.8; transform: translateY(-2px); }
+    /* ── CAMERA TABLE ── */
+    .cam-table { width: 100%; border-collapse: collapse; }
+    .cam-table th {
+      text-align: left; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: .06em;
+      color: var(--muted); padding: 0 12px 10px 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .cam-table th:last-child { width: 80px; text-align: center; }
+    .cam-row-tr td {
+      padding: 10px 12px 10px 0;
+      border-bottom: 1px solid rgba(35,45,66,.5);
+      vertical-align: middle;
+    }
+    .cam-row-tr:last-child td { border-bottom: none; }
+    .cam-idx {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px; color: var(--muted);
+      background: var(--surface2); border: 1px solid var(--border);
+      width: 28px; height: 28px; border-radius: 6px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .tbl-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      padding: 7px 12px;
+      font-size: 13px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color .15s;
+    }
+    .tbl-input:focus { border-color: var(--accent); background: rgba(59,130,246,.05); }
+    .tbl-input::placeholder { color: var(--muted); }
+    .tbl-input.mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 
-        /* Discovery List */
-        .discovery-list { margin-top: 1rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1rem; }
-        .discovered-item {
-            display: flex; justify-content: space-between; align-items: center;
-            background: rgba(255, 255, 255, 0.03); padding: 12px 20px; border-radius: 12px; margin-bottom: 8px;
-        }
-        .scan-spinner { 
-            display: inline-block; width: 16px; height: 16px; border: 2px solid var(--info); 
-            border-top-color: transparent; border-radius: 50%; animation: spin 1s linear infinite; 
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-    </style>
+    /* ── BUTTONS ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 7px 14px; border-radius: 6px; border: none;
+      font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: all .15s;
+      text-decoration: none; white-space: nowrap;
+      font-family: 'Inter', sans-serif;
+    }
+    .btn-primary { background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: #2563eb; }
+    .btn-secondary {
+      background: var(--surface2); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { border-color: var(--border2); background: #1e2a3d; }
+    .btn-danger {
+      background: rgba(239,68,68,.08); color: var(--red);
+      border: 1px solid rgba(239,68,68,.25);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,.15); border-color: var(--red); }
+    .btn-info {
+      background: rgba(6,182,212,.08); color: var(--info);
+      border: 1px solid rgba(6,182,212,.25);
+    }
+    .btn-info:hover { background: rgba(6,182,212,.15); }
+    .btn:disabled { opacity: .45; pointer-events: none; }
+    .btn-sm { padding: 5px 10px; font-size: 12px; }
+
+    /* ── DISCOVERY LIST ── */
+    .device-item {
+      display: flex; align-items: center; justify-content: space-between;
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px 16px; margin-bottom: 8px;
+      transition: border-color .15s;
+    }
+    .device-item:hover { border-color: var(--border2); }
+    .device-item:last-child { margin-bottom: 0; }
+    .device-info .name { font-size: 13px; font-weight: 600; }
+    .device-info .ip   { font-size: 11px; color: var(--muted); font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+    .scan-status {
+      font-size: 12px; color: var(--muted);
+      padding: 12px 0;
+    }
+    .spinner {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid var(--border2);
+      border-top-color: var(--info);
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: 28px; right: 28px;
+      background: var(--surface);
+      border: 1px solid var(--green);
+      border-radius: 10px; padding: 14px 20px;
+      display: none; z-index: 999;
+      font-size: 13px; font-weight: 500;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4);
+      animation: slide-up .25s ease;
+    }
+    @keyframes slide-up { from { transform:translateY(10px); opacity:0; } to { transform:translateY(0); opacity:1; } }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    /* ── DIVIDER ── */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <header>
-            <h1>系統配置中心</h1>
-            <a href="/" style="color: var(--text); text-decoration: none; opacity: 0.7;">← 返回儀表板</a>
-        </header>
 
-        <!-- 新增：網路診斷小工具 -->
-        <section class="glass-card" style="border-left: 4px solid var(--info); padding: 1.5rem;">
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <h3 style="margin: 0; font-size: 1.1rem; color: var(--info);">📍 系統網路資訊</h3>
-                    <div id="net-info" style="font-size: 0.9rem; opacity: 0.7; margin-top: 5px;">正在取得網路狀態...</div>
-                </div>
-                <div style="text-align: right;">
-                    <div style="font-size: 0.8rem; opacity: 0.5; margin-bottom: 5px;">連線測試 (TCP)</div>
-                    <div style="display: flex; gap: 5px;">
-                        <input type="text" id="ping-target" placeholder="192.168.x.x" style="padding: 5px 10px; width: 140px; font-size: 0.8rem;">
-                        <button class="btn btn-outline" style="padding: 5px 10px; font-size: 0.8rem;" onclick="testConnection()">測試</button>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <section class="glass-card">
-            <h2>📜 已配置攝影機</h2>
-            <form id="config-form">
-                <div id="camera-list">
-                    {% for cam in cameras %}
-                    <div class="cam-row" id="row-{{ loop.index0 }}">
-                        <input type="text" name="name_{{ loop.index0 }}" value="{{ cam.name }}">
-                        <input type="text" name="ip_{{ loop.index0 }}" value="{{ cam.ip }}">
-                        <button type="button" class="btn btn-danger" onclick="removeRow({{ loop.index0 }})">移除</button>
-                    </div>
-                    {% endfor %}
-                </div>
-                <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
-                    <button type="button" class="btn btn-outline" onclick="addRow()">+ 手動新增</button>
-                    <button type="submit" class="btn btn-primary">💾 儲存並套用</button>
-                </div>
-            </form>
-        </section>
-
-        <section class="glass-card">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 style="margin: 0; color: var(--accent);">🔍 發現新設備 (mDNS)</h2>
-                <button class="btn btn-outline" onclick="startScan()" id="scan-btn">
-                    <span>開始掃描</span>
-                </button>
-            </div>
-            <div id="discovery-status" style="font-size: 0.9rem; opacity: 0.6; margin-bottom: 10px;">
-                點擊上方按鈕開始搜尋區域網路中的 ESP32 設備...
-            </div>
-            <div id="discovered-list" class="discovery-list">
-                <!-- Discovered items appear here -->
-            </div>
-        </section>
+<!-- ── TOPBAR ── -->
+<nav class="topbar">
+  <div class="logo">
+    <div class="logo-icon">🚶</div>
+    <div>
+      <div class="logo-text">先行一步</div>
+      <div class="logo-sub">邊緣 AI 行人安全監控系統</div>
     </div>
+  </div>
+  <div class="topbar-right">
+    <a href="/" class="topbar-btn">← 返回儀表板</a>
+    <button class="topbar-btn primary" onclick="saveConfig()" id="save-btn">💾 儲存並套用</button>
+  </div>
+</nav>
 
-    <script>
-        let rowCount = {{ cameras|length }};
+<!-- ── BREADCRUMB ── -->
+<div class="breadcrumb">
+  <a href="/">儀表板</a>
+  <span class="sep">/</span>
+  <span class="current">系統配置中心</span>
+</div>
 
-        async function fetchNetInfo() {
-            try {
-                const resp = await fetch('/api/net_info');
-                const data = await resp.json();
-                document.getElementById('net-info').innerText = `主機名稱: ${data.hostname} | 區域網路 IP: ${data.local_ip}`;
-            } catch (e) {
-                document.getElementById('net-info').innerText = "無法取得網路資訊";
-            }
-        }
-        window.onload = fetchNetInfo;
+<!-- ── PAGE CONTENT ── -->
+<div class="page">
+  <div class="page-title">系統配置中心</div>
+  <div class="page-desc">管理 ESP32-CAM 攝影機節點、測試網路連線，以及掃描區域網路設備</div>
 
-        async function testConnection() {
-            const target = document.getElementById('ping-target').value;
-            if(!target) return;
-            const btn = event.currentTarget;
-            const originalText = btn.innerText;
-            btn.innerText = "⏳";
-            try {
-                const resp = await fetch(`/api/ping/${target}`);
-                const data = await resp.json();
-                if(data.status === "success") {
-                    alert(`✅ 連線成功！ ${target} 可正常通訊。`);
-                } else {
-                    alert(`❌ 連線失敗！\n原因: ${data.message}\n請檢查設備是否在同一個網段，或是否有其他裝置佔用連線。`);
-                }
-            } catch(e) { alert("連線測試發生錯誤"); }
-            finally { btn.innerText = originalText; }
-        }
+  <!-- NETWORK INFO CARD -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">📍</span>系統網路資訊</div>
+    </div>
+    <div class="card-body">
+      <div class="net-bar">
+        <div class="net-chips">
+          <div class="net-chip">
+            <span class="label">主機名稱</span>
+            <span id="s-hostname">載入中...</span>
+          </div>
+          <div class="net-chip">
+            <span class="label">本機 IP</span>
+            <span id="s-ip">載入中...</span>
+          </div>
+          <div class="net-chip">
+            <span class="label">Wi-Fi</span>
+            <span id="s-ssid">載入中...</span>
+          </div>
+        </div>
+        <div class="tcp-row">
+          <input class="tbl-input mono" type="text" id="ping-target"
+            placeholder="192.168.x.x" style="width:160px">
+          <button class="btn btn-info" onclick="testConnection()" id="ping-btn">
+            ⚡ TCP 測試
+          </button>
+          <span class="result-badge pending" id="ping-result" style="display:none"></span>
+        </div>
+      </div>
+    </div>
+  </div>
 
-        function addRow(name = "", ip = "") {
-            const container = document.getElementById('camera-list');
-            const div = document.createElement('div');
-            div.className = 'cam-row';
-            div.id = `row-${rowCount}`;
-            div.innerHTML = `
-                <input type="text" name="name_${rowCount}" value="${name}" placeholder="名稱">
-                <input type="text" name="ip_${rowCount}" value="${ip}" placeholder="IP">
-                <button type="button" class="btn btn-danger" onclick="removeRow(${rowCount})">移除</button>
-            `;
-            container.appendChild(div);
-            rowCount++;
-        }
+  <!-- CAMERA LIST CARD -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">📷</span>已配置攝影機節點</div>
+      <span style="font-size:12px;color:var(--muted)" id="cam-count">{{ cameras|length }} 個節點</span>
+    </div>
+    <div class="card-body" style="padding: 0 20px;">
+      <table class="cam-table">
+        <thead>
+          <tr>
+            <th style="width:40px">#</th>
+            <th>名稱</th>
+            <th>IP 位址 / 端口</th>
+            <th style="text-align:center">操作</th>
+          </tr>
+        </thead>
+        <tbody id="camera-list">
+          {% for cam in cameras %}
+          <tr class="cam-row-tr" id="row-{{ loop.index0 }}">
+            <td><div class="cam-idx">{{ loop.index }}</div></td>
+            <td style="padding-right:12px">
+              <input class="tbl-input" type="text"
+                name="name_{{ loop.index0 }}" value="{{ cam.name }}" placeholder="攝影機名稱">
+            </td>
+            <td style="padding-right:12px">
+              <input class="tbl-input mono" type="text"
+                name="ip_{{ loop.index0 }}" value="{{ cam.ip }}" placeholder="192.168.x.x">
+            </td>
+            <td style="text-align:center">
+              <button class="btn btn-danger btn-sm" onclick="removeRow({{ loop.index0 }})">移除</button>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div style="padding: 16px 0 4px 0" id="empty-hint" style="display:none">
+        <span style="font-size:12px;color:var(--muted)">尚未配置任何攝影機，請點擊「新增節點」加入設備。</span>
+      </div>
+    </div>
+    <div class="card-footer">
+      <button class="btn btn-secondary" onclick="addRow()">＋ 新增節點</button>
+      <span style="flex:1"></span>
+      <span style="font-size:12px;color:var(--muted)" id="save-hint"></span>
+      <button class="btn btn-primary" onclick="saveConfig()" id="save-btn-2">💾 儲存並套用</button>
+    </div>
+  </div>
 
-        function removeRow(id) { 
-            const row = document.getElementById(`row-${id}`);
-            if(row) row.remove(); 
-        }
+  <!-- MDNS DISCOVERY CARD -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-title"><span class="icon">🔍</span>自動發現設備 (mDNS)</div>
+      <button class="btn btn-secondary btn-sm" onclick="startScan()" id="scan-btn">
+        ▶ 開始掃描
+      </button>
+    </div>
+    <div class="card-body">
+      <div class="scan-status" id="discovery-status">
+        點擊「開始掃描」，自動搜尋區域網路中名稱含 <code style="background:var(--surface2);padding:2px 6px;border-radius:4px;font-family:'JetBrains Mono',monospace;font-size:11px">esp32-safety</code> 的 HTTP 設備。
+      </div>
+      <div id="discovered-list"></div>
+    </div>
+  </div>
 
-        async function startScan() {
-            const btn = document.getElementById('scan-btn');
-            const status = document.getElementById('discovery-status');
-            btn.disabled = true;
-            status.innerHTML = '<div class="scan-spinner"></div> 正在掃描區網設備...';
-            
-            try {
-                const resp = await fetch('/scan');
-                const devices = await resp.json();
-                const list = document.getElementById('discovered-list');
-                list.innerHTML = "";
-                
-                if (devices.length === 0) {
-                    status.innerText = "未在區網中發現新的安全攝影機。";
-                } else {
-                    status.innerText = `發現 ${devices.length} 個可用的設備！`;
-                    devices.forEach(dev => {
-                        const div = document.createElement('div');
-                        div.className = 'discovered-item';
-                        div.innerHTML = `
-                            <div>
-                                <div style="font-weight: 600;">${dev.name}</div>
-                                <div style="font-size: 0.8rem; opacity: 0.6;">IP: ${dev.ip}</div>
-                            </div>
-                            <button class="btn btn-primary" onclick="addRow('${dev.name}', '${dev.ip}')">加入系統</button>
-                        `;
-                        list.appendChild(div);
-                    });
-                }
-            } catch (err) {
-                status.innerText = "掃描失敗，請檢查網路連線。";
-            } finally {
-                btn.disabled = false;
-            }
-        }
+</div><!-- /page -->
 
-        document.getElementById('config-form').onsubmit = async (e) => {
-            e.preventDefault();
-            const cameras = [];
-            const rows = document.querySelectorAll('.cam-row');
-            
-            rows.forEach((row, index) => {
-                const nameInput = row.querySelector('input[type="text"]:nth-child(1)');
-                const ipInput = row.querySelector('input[type="text"]:nth-child(2)');
-                if (nameInput && ipInput && nameInput.value && ipInput.value) {
-                    cameras.push({ 
-                        id: index + 1, 
-                        name: nameInput.value, 
-                        ip: ipInput.value 
-                    });
-                }
-            });
+<!-- ── SAVE TOAST ── -->
+<div id="toast">✅ 設定已儲存，系統已重新套用攝影機連線。</div>
 
-            if (cameras.length === 0) {
-                if(!confirm("目前沒有配置任何攝影機，確定要儲存嗎？")) return;
-            }
+<script>
+  let rowCount = {{ cameras|length }};
 
-            try {
-                const resp = await fetch('/settings', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cameras })
-                });
-                if (resp.ok) {
-                    alert("設定已儲存並生效！系統正在重新啟動背景連線任務。");
-                    window.location.href = "/";
-                }
-            } catch (err) {
-                alert("儲存失敗，請檢查後端服務是否正常。");
-            }
-        };
-    </script>
+  // ── Net Info ──
+  async function fetchNetInfo() {
+    try {
+      const [nRes, wRes] = await Promise.all([fetch('/api/net_info'), fetch('/api/wifi_status')]);
+      const n = await nRes.json();
+      const w = await wRes.json();
+      document.getElementById('s-hostname').textContent = n.hostname || '--';
+      document.getElementById('s-ip').textContent = n.local_ip || '--';
+      document.getElementById('s-ssid').textContent = w.ssid ? `${w.ssid} (${w.mode})` : '--';
+    } catch(e) {
+      document.getElementById('s-hostname').textContent = '無法取得';
+    }
+  }
+  fetchNetInfo();
+
+  // ── TCP Test ──
+  async function testConnection() {
+    const target = document.getElementById('ping-target').value.trim();
+    if (!target) return;
+    const btn = document.getElementById('ping-btn');
+    const result = document.getElementById('ping-result');
+    btn.disabled = true;
+    btn.textContent = '⏳ 測試中...';
+    result.style.display = 'none';
+    try {
+      const res = await fetch(`/api/ping/${encodeURIComponent(target)}`);
+      const data = await res.json();
+      result.style.display = 'inline-block';
+      if (data.status === 'success') {
+        result.className = 'result-badge ok';
+        result.textContent = '● OPEN';
+      } else {
+        result.className = 'result-badge fail';
+        result.textContent = '✕ ' + (data.message || 'CLOSED');
+      }
+    } catch(e) {
+      result.style.display = 'inline-block';
+      result.className = 'result-badge fail';
+      result.textContent = '✕ 錯誤';
+    } finally {
+      btn.disabled = false;
+      btn.textContent = '⚡ TCP 測試';
+    }
+  }
+
+  // ── Add Row ──
+  function addRow(name = '', ip = '') {
+    const tbody = document.getElementById('camera-list');
+    const idx = rowCount;
+    const displayIdx = tbody.querySelectorAll('tr').length + 1;
+    const tr = document.createElement('tr');
+    tr.className = 'cam-row-tr';
+    tr.id = `row-${idx}`;
+    tr.innerHTML = `
+      <td><div class="cam-idx">${displayIdx}</div></td>
+      <td style="padding-right:12px">
+        <input class="tbl-input" type="text" name="name_${idx}"
+          value="${name}" placeholder="攝影機名稱">
+      </td>
+      <td style="padding-right:12px">
+        <input class="tbl-input mono" type="text" name="ip_${idx}"
+          value="${ip}" placeholder="192.168.x.x">
+      </td>
+      <td style="text-align:center">
+        <button class="btn btn-danger btn-sm" onclick="removeRow(${idx})">移除</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+    rowCount++;
+    updateCamCount();
+    // Animate new row
+    tr.style.opacity = '0';
+    requestAnimationFrame(() => {
+      tr.style.transition = 'opacity .25s';
+      tr.style.opacity = '1';
+    });
+  }
+
+  // ── Remove Row ──
+  function removeRow(id) {
+    const row = document.getElementById(`row-${id}`);
+    if (row) {
+      row.style.transition = 'opacity .2s';
+      row.style.opacity = '0';
+      setTimeout(() => { row.remove(); updateCamCount(); }, 200);
+    }
+  }
+
+  function updateCamCount() {
+    const count = document.querySelectorAll('.cam-row-tr').length;
+    document.getElementById('cam-count').textContent = count + ' 個節點';
+  }
+
+  // ── Save Config ──
+  async function saveConfig() {
+    const rows = document.querySelectorAll('.cam-row-tr');
+    const cameras = [];
+    rows.forEach((row, index) => {
+      const nameEl = row.querySelector('input[type="text"]:nth-child(1)') ||
+                     row.querySelector('input[name^="name_"]');
+      const ipEl   = row.querySelector('input[type="text"]:nth-child(2)') ||
+                     row.querySelector('input[name^="ip_"]');
+      // Get all inputs in the row
+      const inputs = row.querySelectorAll('input[type="text"]');
+      if (inputs.length >= 2 && inputs[0].value && inputs[1].value) {
+        cameras.push({ id: index + 1, name: inputs[0].value, ip: inputs[1].value });
+      }
+    });
+
+    if (cameras.length === 0 && !confirm('目前沒有配置任何攝影機，確定要儲存嗎？')) return;
+
+    const btns = ['save-btn', 'save-btn-2'].map(id => document.getElementById(id));
+    btns.forEach(b => { if(b) { b.disabled = true; b.textContent = '⏳ 儲存中...'; } });
+
+    try {
+      const resp = await fetch('/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cameras })
+      });
+      if (resp.ok) {
+        showToast();
+        document.getElementById('save-hint').textContent = '✓ 上次儲存: ' + new Date().toLocaleTimeString('zh-TW', {hour12:false});
+        setTimeout(() => window.location.href = '/', 1800);
+      } else {
+        alert('儲存失敗，後端回應異常。');
+      }
+    } catch(e) {
+      alert('儲存失敗，請確認後端服務正常。');
+    } finally {
+      btns.forEach(b => { if(b) { b.disabled = false; b.innerHTML = '💾 儲存並套用'; } });
+    }
+  }
+
+  // ── mDNS Scan ──
+  async function startScan() {
+    const btn = document.getElementById('scan-btn');
+    const status = document.getElementById('discovery-status');
+    const list = document.getElementById('discovered-list');
+    btn.disabled = true;
+    status.innerHTML = '<span class="spinner"></span>正在掃描區域網路中的 ESP32 設備...';
+    list.innerHTML = '';
+    try {
+      const resp = await fetch('/scan');
+      const devices = await resp.json();
+      if (devices.length === 0) {
+        status.innerHTML = '未在區域網路發現新的安全攝影機設備。';
+      } else {
+        status.innerHTML = `發現 <strong>${devices.length}</strong> 個設備：`;
+        devices.forEach(dev => {
+          const div = document.createElement('div');
+          div.className = 'device-item';
+          div.innerHTML = `
+            <div class="device-info">
+              <div class="name">${dev.name}</div>
+              <div class="ip">${dev.ip}</div>
+            </div>
+            <button class="btn btn-secondary btn-sm" onclick="addRow('${dev.name}', '${dev.ip}'); this.textContent='✓ 已加入'; this.disabled=true;">
+              ＋ 加入系統
+            </button>
+          `;
+          list.appendChild(div);
+        });
+      }
+    } catch(e) {
+      status.innerHTML = '<span style="color:var(--red)">掃描失敗，請確認網路連線正常。</span>';
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  // ── Toast ──
+  function showToast() {
+    const t = document.getElementById('toast');
+    t.style.display = 'block';
+    setTimeout(() => { t.style.display = 'none'; }, 2500);
+  }
+
+  // Enter key on ping input
+  document.getElementById('ping-target').addEventListener('keydown', e => {
+    if (e.key === 'Enter') testConnection();
+  });
+</script>
 </body>
 </html>
