@@ -1,4 +1,10 @@
 import os
+import sys
+
+# ── Windows UTF-8 修復：強制 stdout/stderr 使用 UTF-8，避免 cp950 錯誤 ──
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 import json
 import subprocess
 import asyncio
@@ -58,7 +64,11 @@ def add_log(message: str, level: str = "INFO"):
     timestamp = datetime.now().strftime("%H:%M:%S")
     entry = {"time": timestamp, "msg": message, "level": level}
     system_logs.append(entry)
-    print(f"[{timestamp}] {level}: {message}")
+    try:
+        print(f"[{timestamp}] {level}: {message}")
+    except UnicodeEncodeError:
+        safe_msg = message.encode(sys.stdout.encoding or 'utf-8', errors='replace').decode(sys.stdout.encoding or 'utf-8')
+        print(f"[{timestamp}] {level}: {safe_msg}")
 
 async def check_tcp_port(host_port: str, default_port: int = 80, timeout: float = 3.0):
     """底層 TCP 探測，返回 (success, message)"""

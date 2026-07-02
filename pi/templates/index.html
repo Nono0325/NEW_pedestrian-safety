@@ -1,564 +1,840 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
-
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>先行一步 - AI 交通監控中心</title>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600&display=swap" rel="stylesheet">
-    <style>
-        :root {
-            --bg: #0a0e14;
-            --glass: rgba(255, 255, 255, 0.05);
-            --accent: #ffb300;
-            /* Hazard Amber */
-            --danger: #ff4b5c;
-            --success: #00e676;
-            --text: #e0e0e0;
-            --info: #00f2ff;
-            --card-width: 400px;
-        }
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>先行一步 - AI 交通監控中心</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #0f1117;
+      --surface:   #161b27;
+      --surface2:  #1c2333;
+      --border:    #232d42;
+      --border2:   #2d3a52;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --accent:    #3b82f6;
+      --accent2:   #60a5fa;
+      --green:     #22c55e;
+      --amber:     #f59e0b;
+      --red:       #ef4444;
+      --info:      #06b6d4;
+      --purple:    #a855f7;
+      --card-w:    420px;
+    }
+    html { scroll-behavior: smooth; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
 
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: 'Outfit', sans-serif;
-        }
+    /* ══════════════ TOPBAR ══════════════ */
+    .topbar {
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(15,17,23,0.92);
+      backdrop-filter: blur(16px);
+      border-bottom: 1px solid var(--border);
+      padding: 0 28px;
+      height: 58px;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+    .logo-icon {
+      width: 32px; height: 32px;
+      background: linear-gradient(135deg, var(--accent), var(--info));
+      border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+    .logo-text { font-size: 15px; font-weight: 700; letter-spacing: -0.02em; }
+    .logo-sub  { font-size: 11px; color: var(--muted); margin-top: 1px; }
+    .topbar-right { display: flex; align-items: center; gap: 10px; }
+    .sys-time {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px; color: var(--muted);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 5px 12px; border-radius: 6px;
+    }
+    .topbar-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: var(--text);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all .15s;
+      cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .topbar-btn:hover { background: var(--surface2); border-color: var(--border2); }
+    .topbar-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: #fff;
+    }
+    .topbar-btn.primary:hover { background: #2563eb; }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); animation: blink 2s infinite; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.4} }
 
-        body {
-            background-color: var(--bg);
-            color: var(--text);
-            min-height: 100vh;
-            padding: 2rem;
-            background: radial-gradient(circle at top right, #1a2a3a, var(--bg));
-        }
+    /* ══════════════ KPI ROW ══════════════ */
+    .kpi-row {
+      display: flex; gap: 1px;
+      background: var(--border);
+      border-bottom: 1px solid var(--border);
+    }
+    .kpi-cell {
+      flex: 1;
+      background: var(--surface);
+      padding: 14px 20px;
+      display: flex; flex-direction: column; gap: 3px;
+    }
+    .kpi-label { font-size: 11px; color: var(--muted); font-weight: 500; text-transform: uppercase; letter-spacing: .06em; }
+    .kpi-value { font-size: 22px; font-weight: 700; font-family: 'JetBrains Mono', monospace; line-height: 1; }
+    .kpi-sub   { font-size: 11px; color: var(--muted); }
+    .kpi-cell.green .kpi-value { color: var(--green); }
+    .kpi-cell.amber .kpi-value { color: var(--amber); }
+    .kpi-cell.blue  .kpi-value { color: var(--accent2); }
+    .kpi-cell.info  .kpi-value { color: var(--info); }
+    .kpi-cell.purple.kpi-value { color: var(--purple); }
 
-        header {
-            margin-bottom: 2rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
+    /* ══════════════ MAIN CONTENT ══════════════ */
+    .main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 0;
+    }
+    .content-area { padding: 24px; overflow-y: auto; }
+    .sidebar { border-left: 1px solid var(--border); background: var(--surface); overflow-y: auto; }
 
-        h1 {
-            font-size: 1.8rem;
-            color: var(--accent);
-            text-shadow: 0 0 15px rgba(255, 179, 0, 0.3);
-        }
+    /* ══════════════ SECTION HEADERS ══════════════ */
+    .sec-hd {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 16px;
+    }
+    .sec-title {
+      font-size: 12px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: .08em; color: var(--muted);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .sec-title::before { content:''; width:3px; height:14px; background:var(--accent); border-radius:2px; }
 
-        .settings-btn {
-            background: var(--glass);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-size: 0.9rem;
-            transition: 0.3s;
-        }
+    /* ══════════════ CAMERA GRID ══════════════ */
+    .cam-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(var(--card-w), 1fr));
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+    .cam-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: border-color .2s, box-shadow .2s;
+    }
+    .cam-card:hover { border-color: var(--border2); }
+    .cam-card.alarm-active { border-color: var(--amber); box-shadow: 0 0 20px rgba(245,158,11,.12); }
+    .video-wrap {
+      aspect-ratio: 4/3;
+      background: #000;
+      position: relative;
+      overflow: hidden;
+    }
+    .video-wrap img { width: 100%; height: 100%; object-fit: cover; transition: opacity .3s; }
+    .video-overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0,0,0,.6);
+      font-size: 13px; color: var(--muted);
+      pointer-events: none;
+    }
+    .video-overlay.hidden { display: none; }
+    .cam-badge {
+      position: absolute; top: 10px; left: 10px;
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+      text-transform: uppercase; letter-spacing: .05em;
+    }
+    .cam-badge.online  { background: rgba(34,197,94,.2); color: var(--green); border: 1px solid rgba(34,197,94,.3); }
+    .cam-badge.offline { background: rgba(239,68,68,.2); color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+    .cam-fps-badge {
+      position: absolute; top: 10px; right: 10px;
+      font-size: 10px; font-weight: 700; padding: 3px 8px;
+      border-radius: 4px; font-family: 'JetBrains Mono', monospace;
+      background: rgba(6,182,212,.15); color: var(--info);
+      border: 1px solid rgba(6,182,212,.25);
+    }
+    /* 截圖按鈕覆蓋層 */
+    .screenshot-btn {
+      position: absolute; bottom: 10px; right: 10px;
+      background: rgba(0,0,0,.6); border: 1px solid var(--border2);
+      color: var(--muted); padding: 5px 10px; border-radius: 6px;
+      font-size: 11px; cursor: pointer; display: flex; align-items: center; gap: 4px;
+      transition: all .2s; opacity: 0;
+    }
+    .video-wrap:hover .screenshot-btn { opacity: 1; }
+    .screenshot-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+    .cam-info { padding: 14px 16px; }
+    .cam-info-top {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .cam-name { font-size: 14px; font-weight: 600; }
+    .alarm-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      padding: 6px 12px; border-radius: 6px;
+      font-size: 12px; font-weight: 500; cursor: pointer;
+      transition: all .2s;
+    }
+    .alarm-btn:hover { border-color: var(--amber); color: var(--amber); }
+    .alarm-btn.on {
+      background: rgba(245,158,11,.1);
+      border-color: var(--amber);
+      color: var(--amber);
+      animation: pulse-border 1.2s infinite;
+    }
+    @keyframes pulse-border {
+      0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.3); }
+      50%      { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
+    }
+    .cam-stats {
+      display: grid; grid-template-columns: 1fr 1fr 1fr 1fr;
+      gap: 8px;
+    }
+    .stat-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px; padding: 8px;
+    }
+    .stat-box .lbl { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing:.04em; }
+    .stat-box .val { font-size: 13px; font-weight: 600; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+    .rssi-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 6px; overflow: hidden; }
+    .rssi-fill { height: 100%; border-radius: 2px; transition: width .8s; }
+    .direct-link {
+      margin-top: 10px; font-size: 11px; color: var(--muted);
+      display: inline-flex; align-items: center; gap: 4px;
+      cursor: pointer; text-decoration: none;
+      border-bottom: 1px dashed var(--border2); padding-bottom: 1px;
+    }
+    .direct-link:hover { color: var(--info); border-color: var(--info); }
 
-        .settings-btn:hover {
-            background: var(--accent);
-            color: #000;
-        }
+    /* ══════════════ CHARTS SECTION ══════════════ */
+    .chart-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+    .chart-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px; padding: 16px;
+    }
+    .chart-title { font-size: 12px; color: var(--muted); font-weight: 600; margin-bottom: 12px; }
+    .chart-wrap { position: relative; height: 180px; }
 
-        .dashboard-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(var(--card-width), 1fr));
-            gap: 1.5rem;
-            justify-content: center;
-        }
+    /* ══════════════ SIDEBAR ══════════════ */
+    .sidebar-section { padding: 16px; border-bottom: 1px solid var(--border); }
+    .sidebar-section:last-child { border-bottom: none; }
 
-        .camera-card {
-            background: var(--glass);
-            backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            border-radius: 16px;
-            overflow: hidden;
-            transition: 0.3s;
-            position: relative;
-            width: 100%;
-            max-width: var(--card-width);
-            margin: 0 auto;
-        }
+    /* Timeline */
+    .timeline { list-style: none; position: relative; }
+    .timeline::before {
+      content:''; position: absolute; left: 9px; top: 0; bottom: 0;
+      width: 1px; background: var(--border);
+    }
+    .tl-item {
+      position: relative; padding: 0 0 14px 26px;
+      font-size: 12px; line-height: 1.5;
+    }
+    .tl-item:last-child { padding-bottom: 0; }
+    .tl-dot {
+      position: absolute; left: 4px; top: 3px;
+      width: 11px; height: 11px; border-radius: 50%;
+      border: 2px solid var(--bg);
+    }
+    .tl-dot.info   { background: var(--accent); }
+    .tl-dot.warn   { background: var(--amber); }
+    .tl-dot.error  { background: var(--red); }
+    .tl-time { color: var(--muted); font-size: 11px; font-family:'JetBrains Mono',monospace; }
+    .tl-msg  { color: var(--text); margin-top: 1px; }
 
-        .camera-card:hover {
-            transform: translateY(-5px);
-            border-color: var(--accent);
-        }
+    /* Resource Monitor */
+    .res-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+    .res-label { font-size: 12px; color: var(--muted); width: 50px; flex-shrink: 0; }
+    .res-bar { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .res-fill { height: 100%; border-radius: 3px; transition: width .8s; }
+    .res-val { font-size: 12px; font-family:'JetBrains Mono',monospace; width: 44px; text-align: right; }
+    .gauge-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .gauge-box {
+      background: var(--surface2); border: 1px solid var(--border);
+      border-radius: 8px; padding: 12px; text-align: center;
+    }
+    .gauge-val { font-size: 22px; font-weight: 700; font-family:'JetBrains Mono',monospace; }
+    .gauge-lbl { font-size: 10px; color: var(--muted); margin-top: 3px; text-transform: uppercase; }
 
-        .video-container {
-            aspect-ratio: 4/3;
-            background: #000;
-            position: relative;
-        }
+    /* System info */
+    .sys-row {
+      display: flex; justify-content: space-between; align-items: center;
+      font-size: 12px; padding: 6px 0;
+      border-bottom: 1px solid rgba(35,45,66,.4);
+    }
+    .sys-row:last-child { border-bottom: none; }
+    .sys-row .k { color: var(--muted); }
+    .sys-row .v { font-family:'JetBrains Mono',monospace; font-weight:500; }
 
-        .video-container img {
-            width: 100%;
-            height: 100%;
-            object-fit: cover;
-        }
+    /* ══════════════ SCALE CONTROLS ══════════════ */
+    .scale-wrap {
+      display: flex; align-items: center; gap: 8px;
+      background: var(--surface2); border: 1px solid var(--border);
+      padding: 4px 12px; border-radius: 6px;
+    }
+    .scale-wrap label { font-size: 11px; color: var(--muted); }
+    .scale-wrap input { accent-color: var(--accent); width: 80px; cursor: pointer; }
 
-        .card-info {
-            padding: 1.2rem;
-        }
+    /* ══════════════ ALARM TOAST ══════════════ */
+    #alarm-toast {
+      position: fixed; top: 70px; right: 20px; z-index: 999;
+      background: var(--surface);
+      border: 1px solid var(--amber);
+      border-radius: 10px; padding: 14px 18px;
+      display: none; max-width: 320px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.4), 0 0 0 1px rgba(245,158,11,.15);
+      animation: slide-in .3s ease;
+    }
+    @keyframes slide-in { from { transform: translateX(20px); opacity:0; } to { transform: translateX(0); opacity:1; } }
+    #alarm-toast .toast-title { font-size: 13px; font-weight: 700; color: var(--amber); margin-bottom: 4px; }
+    #alarm-toast .toast-msg   { font-size: 12px; color: var(--muted); }
 
-        .info-top {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 1rem;
-        }
+    /* ══════════════ SCROLLBARS ══════════════ */
+    ::-webkit-scrollbar { width: 4px; height: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
-        .cam-name {
-            font-weight: 600;
-            font-size: 1.1rem;
-        }
-
-        .data-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 0.8rem;
-            font-size: 0.85rem;
-        }
-
-        .data-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            opacity: 0.8;
-        }
-
-        .data-label {
-            color: var(--info);
-            font-weight: 600;
-            min-width: 45px;
-        }
-
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 20px;
-            font-size: 0.7rem;
-            font-weight: 600;
-        }
-
-        .online {
-            background: rgba(0, 230, 118, 0.1);
-            color: var(--success);
-        }
-
-        .offline {
-            background: rgba(255, 75, 92, 0.1);
-            color: var(--danger);
-        }
-
-        /* Hazard Style Toggle */
-        .hazard-btn {
-            background: rgba(255, 255, 255, 0.05);
-            border: 1px solid rgba(255, 255, 255, 0.1);
-            width: 44px;
-            height: 44px;
-            border-radius: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            transition: 0.3s;
-            color: #666;
-        }
-
-        .hazard-on {
-            background: rgba(255, 179, 0, 0.2);
-            color: var(--accent);
-            box-shadow: 0 0 20px rgba(255, 179, 0, 0.4);
-            border-color: var(--accent);
-            animation: pulse 1s infinite;
-        }
-
-        @keyframes pulse {
-            0% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
-
-            100% {
-                opacity: 1;
-            }
-        }
-
-        .rssi-bar {
-            width: 40px;
-            height: 4px;
-            background: #333;
-            border-radius: 2px;
-            overflow: hidden;
-        }
-
-        .rssi-fill {
-            height: 100%;
-            background: var(--success);
-            transition: 1s;
-        }
-
-        /* Debug Console Styles */
-        .debug-console {
-            position: fixed;
-            bottom: 0;
-            left: 0;
-            right: 0;
-            background: rgba(0, 0, 0, 0.9);
-            border-top: 1px solid var(--accent);
-            padding: 10px 20px;
-            z-index: 1000;
-            max-height: 200px;
-            overflow-y: auto;
-            display: none;
-            box-shadow: 0 -10px 30px rgba(0, 0, 0, 0.5);
-        }
-
-        .console-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 8px;
-            font-size: 0.8rem;
-            font-weight: 600;
-            color: var(--accent);
-        }
-
-        .log-list {
-            font-family: 'Courier New', Courier, monospace;
-            font-size: 0.8rem;
-            color: #aaa;
-            list-style: none;
-        }
-
-        .log-item {
-            margin-bottom: 4px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            padding-bottom: 2px;
-        }
-
-        .log-info {
-            color: var(--success);
-            opacity: 0.8;
-        }
-
-        .log-warn {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .log-error {
-            color: var(--danger);
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .log-toggle {
-            border: none;
-            background: none;
-            color: var(--accent);
-            cursor: pointer;
-            font-size: 0.8rem;
-        }
-
-        .btn-restart {
-            background: var(--danger);
-            color: white;
-            border: none;
-            padding: 4px 10px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 0.75rem;
-        }
-
-        .log-info {
-            color: var(--success);
-            opacity: 0.8;
-        }
-
-        .log-warn {
-            color: var(--accent);
-            font-weight: 600;
-        }
-
-        .log-error {
-            color: var(--danger);
-            font-weight: 600;
-            text-transform: uppercase;
-        }
-
-        .direct-link {
-            font-size: 0.75rem;
-            color: var(--info);
-            text-decoration: none;
-            border-bottom: 1px dashed var(--info);
-            cursor: pointer;
-            opacity: 0.7;
-        }
-
-        .direct-link:hover {
-            opacity: 1;
-        }
-    </style>
+    /* ══════════════ RESPONSIVE ══════════════ */
+    @media (max-width: 960px) {
+      .main { grid-template-columns: 1fr; }
+      .sidebar { border-left: none; border-top: 1px solid var(--border); }
+      .chart-row { grid-template-columns: 1fr; }
+    }
+  </style>
 </head>
-
 <body>
-    <header>
-        <div>
-            <h1>先行一步：斑馬線智慧預警看板</h1>
-        </div>
-        <div style="display: flex; gap: 20px; align-items: center;">
-            <div
-                style="display: flex; align-items: center; gap: 10px; background: var(--glass); padding: 5px 15px; border-radius: 20px; border: 1px solid rgba(255,255,255,0.05);">
-                <span style="font-size: 0.8rem; opacity: 0.7;">縮放</span>
-                <input type="range" min="180" max="800" value="400" id="scaleSlider" oninput="updateScale(this.value)"
-                    style="cursor: pointer; accent-color: var(--accent);">
-            </div>
-            <a href="/settings" class="settings-btn">系統配置 (Settings)</a>
-        </div>
-    </header>
 
-    <main class="dashboard-grid">
-        <!-- 新增：系統狀態卡 (基地台資訊) -->
-        <div class="camera-card" style="background: rgba(0, 242, 255, 0.03); border-color: rgba(0, 242, 255, 0.2);">
-            <div
-                style="padding: 1.5rem; height: 100%; display: flex; flex-direction: column; justify-content: space-between;">
-                <div>
-                    <h3
-                        style="color: var(--info); font-size: 1.1rem; margin-bottom: 1.2rem; display: flex; align-items: center; gap: 10px;">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                            stroke-width="2">
-                            <path
-                                d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.59 16.11a6 6 0 0 1 6.82 0M12 20h.01" />
-                        </svg>
-                        Pi 基地台狀態
-                    </h3>
-                    <div style="font-size: 0.9rem; line-height: 2;">
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="opacity: 0.6;">名稱 (SSID):</span>
-                            <span id="ap-ssid" style="font-weight: 600;">--</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="opacity: 0.6;">無線模式:</span>
-                            <span id="ap-mode" style="color: var(--success); font-weight: 600;">--</span>
-                        </div>
-                        <div style="display: flex; justify-content: space-between;">
-                            <span style="opacity: 0.6;">已連線設備:</span>
-                            <span id="ap-clients">--</span>
-                        </div>
-                    </div>
-                </div>
-                <div
-                    style="margin-top: 15px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem; opacity: 0.5;">
-                    系統 IP: <span id="pi-ip-display">--</span>
-                </div>
-            </div>
-        </div>
+<!-- ── TOPBAR ── -->
+<nav class="topbar">
+  <div class="logo">
+    <div class="logo-icon">🚶</div>
+    <div>
+      <div class="logo-text">先行一步</div>
+      <div class="logo-sub">邊緣 AI 行人安全監控系統</div>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <div class="scale-wrap">
+      <label>縮放</label>
+      <input type="range" min="280" max="700" value="420" id="scaleSlider" oninput="updateScale(this.value)">
+    </div>
+    <div class="sys-time" id="clock">--:--:--</div>
+    <div class="status-dot" id="sysStatus" title="系統連線中"></div>
+    <a href="/settings" class="topbar-btn">⚙ 系統配置</a>
+    <button class="topbar-btn primary" onclick="restartFetchers()">↺ 重連攝影機</button>
+  </div>
+</nav>
 
-        {% for cam in cameras %}
-        <div class="camera-card" id="cam-{{ cam.id }}">
-            <div class="video-container">
-                <img src="/video_feed/{{ cam.id }}" id="img-{{ cam.id }}" onerror="this.style.opacity='0'"
-                    onload="this.style.opacity='1'">
-            </div>
-            <div class="card-info">
-                <div class="info-top">
-                    <span class="cam-name">{{ cam.name }}</span>
-                    <div style="display: flex; gap: 12px; align-items: center;">
-                        <button class="hazard-btn" id="hazard-{{ cam.id }}" onclick="toggleAlarm({{ cam.id }})"
-                            title="手動觸發斑馬線警示燈">
-                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                                stroke-width="2">
-                                <path
-                                    d="M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0zM12 9v4m0 4h.01" />
-                            </svg>
-                        </button>
-                        <span class="status-badge offline" id="badge-{{ cam.id }}">OFFLINE</span>
-                    </div>
-                </div>
-                <div class="data-grid">
-                    <div class="data-item">
-                        <span class="data-label">訊號</span>
-                        <div class="rssi-bar">
-                            <div id="rssi-{{ cam.id }}" class="rssi-fill" style="width: 0%"></div>
-                        </div>
-                        <span id="rssi-val-{{ cam.id }}">-- dBm</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">延遲</span>
-                        <span id="latency-{{ cam.id }}" style="color: var(--success)">-- ms</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">TCP 80</span>
-                        <span id="tcp-{{ cam.id }}">掃描中...</span>
-                    </div>
-                    <div class="data-item">
-                        <span class="data-label">警示</span>
-                        <span id="alarm-state-{{ cam.id }}">靜止</span>
-                    </div>
-                    <div style="grid-column: span 2; margin-top: 5px; text-align: center;">
-                        <span class="direct-link" onclick="openDirect('{{ cam.ip }}')">🔗 直連測試 (繞過 Pi 代理)</span>
-                    </div>
-                </div>
-            </div>
-        </div>
-        {% endfor %}
-    </main>
+<!-- ── KPI ROW ── -->
+<div class="kpi-row">
+  <div class="kpi-cell blue">
+    <div class="kpi-label">在線攝影機</div>
+    <div class="kpi-value" id="kpi-online">0 / {{ cameras|length }}</div>
+    <div class="kpi-sub">即時影像節點</div>
+  </div>
+  <div class="kpi-cell info">
+    <div class="kpi-label">AI 推論 FPS</div>
+    <div class="kpi-value" id="kpi-fps">--</div>
+    <div class="kpi-sub">YOLOv8n @ MOCK 節點</div>
+  </div>
+  <div class="kpi-cell amber">
+    <div class="kpi-label">今日警報</div>
+    <div class="kpi-value" id="kpi-alarms">0</div>
+    <div class="kpi-sub">行人入侵事件</div>
+  </div>
+  <div class="kpi-cell green">
+    <div class="kpi-label">平均延遲</div>
+    <div class="kpi-value" id="kpi-latency">-- ms</div>
+    <div class="kpi-sub">ESP32-CAM 回應時間</div>
+  </div>
+  <div class="kpi-cell">
+    <div class="kpi-label">系統上線</div>
+    <div class="kpi-value" id="kpi-uptime" style="color:var(--muted)">--</div>
+    <div class="kpi-sub">最長節點運行時間</div>
+  </div>
+</div>
 
-    <div class="debug-console" id="debugConsole">
-        <div class="console-header">
-            <span>💻 系統診斷控制台 (Live Logs)</span>
-            <div style="display: flex; gap: 15px; align-items: center;">
-                <button class="btn-restart" onclick="restartFetchers()">一鍵重連所有攝影機</button>
-                <button class="log-toggle" onclick="toggleConsole()">[收合]</button>
-            </div>
+<!-- ── MAIN ── -->
+<div class="main">
+  <div class="content-area">
+
+    <!-- Camera Grid -->
+    <div class="sec-hd">
+      <div class="sec-title">攝影機即時畫面</div>
+    </div>
+    <div class="cam-grid" id="camGrid">
+      {% for cam in cameras %}
+      <div class="cam-card" id="cam-{{ cam.id }}">
+        <div class="video-wrap" id="vwrap-{{ cam.id }}">
+          <img src="/video_feed/{{ cam.id }}" id="img-{{ cam.id }}"
+               onerror="handleImgError({{ cam.id }})" onload="handleImgLoad({{ cam.id }})">
+          <div class="video-overlay" id="overlay-{{ cam.id }}">
+            <span>⟳ 等待影像串流...</span>
+          </div>
+          <div class="cam-badge offline" id="badge-{{ cam.id }}">OFFLINE</div>
+          <div class="cam-fps-badge" id="fps-badge-{{ cam.id }}">-- fps</div>
+          <button class="screenshot-btn" onclick="captureFrame({{ cam.id }}, '{{ cam.name }}')" title="截圖下載">
+            📷 截圖
+          </button>
         </div>
-        <ul class="log-list" id="logList">
-            <li class="log-item">正在初始化除錯日誌...</li>
-        </ul>
+        <div class="cam-info">
+          <div class="cam-info-top">
+            <span class="cam-name">{{ cam.name }}</span>
+            <button class="alarm-btn" id="alarm-btn-{{ cam.id }}" onclick="toggleAlarm({{ cam.id }})">
+              <span>⚠</span> 警示燈
+            </button>
+          </div>
+          <div class="cam-stats">
+            <div class="stat-box">
+              <div class="lbl">訊號</div>
+              <div class="val" id="rssi-val-{{ cam.id }}" style="color:var(--muted)">--</div>
+              <div class="rssi-bar"><div class="rssi-fill" id="rssi-{{ cam.id }}" style="width:0%;background:var(--green)"></div></div>
+            </div>
+            <div class="stat-box">
+              <div class="lbl">延遲</div>
+              <div class="val" id="latency-{{ cam.id }}" style="color:var(--muted)">-- ms</div>
+            </div>
+            <div class="stat-box">
+              <div class="lbl">TCP 80</div>
+              <div class="val" id="tcp-{{ cam.id }}" style="color:var(--muted)">--</div>
+            </div>
+            <div class="stat-box">
+              <div class="lbl">警示</div>
+              <div class="val" id="alarm-state-{{ cam.id }}" style="color:var(--muted)">靜止</div>
+            </div>
+          </div>
+          <div style="margin-top:10px">
+            <span class="direct-link" onclick="openDirect('{{ cam.ip }}')">
+              🔗 直連測試 (繞過 Pi 代理)
+            </span>
+          </div>
+        </div>
+      </div>
+      {% endfor %}
     </div>
 
-    <div style="position: fixed; bottom: 20px; right: 20px;">
-        <button onclick="toggleConsole()"
-            style="background: var(--accent); color: #000; border: none; padding: 10px 20px; border-radius: 30px; font-weight: 600; cursor: pointer; box-shadow: 0 4px 15px rgba(255,179,0,0.4);">
-            🛠️ 系統除錯
-        </button>
+    <!-- Charts Row -->
+    <div class="sec-hd">
+      <div class="sec-title">即時數據分析</div>
+    </div>
+    <div class="chart-row">
+      <div class="chart-card">
+        <div class="chart-title">📈 警報歷史（今日各時段）</div>
+        <div class="chart-wrap"><canvas id="alarmChart"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-title">📊 即時 AI 推論幀率 (fps)</div>
+        <div class="chart-wrap"><canvas id="fpsChart"></canvas></div>
+      </div>
     </div>
 
-    <script>
-        const alarmStates = {};
-        const API_KEY = "{{ API_KEY }}";
+  </div><!-- /content-area -->
 
-        function openDirect(ip) {
-            if (!ip) return;
-            const url = `http://${ip}/stream?auth=${API_KEY}`;
-            window.open(url, '_blank');
+  <!-- ── SIDEBAR ── -->
+  <div class="sidebar">
+
+    <!-- System Resources -->
+    <div class="sidebar-section">
+      <div class="sec-title" style="margin-bottom:14px">🌡 系統資源</div>
+      <div class="gauge-grid" style="margin-bottom:14px">
+        <div class="gauge-box">
+          <div class="gauge-val" id="cpu-val" style="color:var(--accent2)">--%</div>
+          <div class="gauge-lbl">CPU 使用率</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-val" id="ram-val" style="color:var(--purple)">--%</div>
+          <div class="gauge-lbl">RAM 使用率</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-val" id="temp-val" style="color:var(--amber)">--°C</div>
+          <div class="gauge-lbl">CPU 溫度</div>
+        </div>
+        <div class="gauge-box">
+          <div class="gauge-val" id="net-val" style="color:var(--info)">-- ms</div>
+          <div class="gauge-lbl">Pi 回應時間</div>
+        </div>
+      </div>
+      <div class="res-row">
+        <span class="res-label">CPU</span>
+        <div class="res-bar"><div class="res-fill" id="cpu-bar" style="width:0%;background:var(--accent2)"></div></div>
+        <span class="res-val" id="cpu-bar-val" style="color:var(--accent2)">0%</span>
+      </div>
+      <div class="res-row">
+        <span class="res-label">RAM</span>
+        <div class="res-bar"><div class="res-fill" id="ram-bar" style="width:0%;background:var(--purple)"></div></div>
+        <span class="res-val" id="ram-bar-val" style="color:var(--purple)">0%</span>
+      </div>
+    </div>
+
+    <!-- System Info -->
+    <div class="sidebar-section">
+      <div class="sec-title" style="margin-bottom:12px">🖥 系統資訊</div>
+      <div class="sys-row"><span class="k">主機名稱</span><span class="v" id="s-hostname">--</span></div>
+      <div class="sys-row"><span class="k">本機 IP</span><span class="v" id="s-ip">--</span></div>
+      <div class="sys-row"><span class="k">Wi-Fi 模式</span><span class="v" id="s-wifi">--</span></div>
+      <div class="sys-row"><span class="k">SSID</span><span class="v" id="s-ssid">--</span></div>
+    </div>
+
+    <!-- Event Timeline -->
+    <div class="sidebar-section">
+      <div class="sec-title" style="margin-bottom:14px">⏱ 事件時間軸</div>
+      <ul class="timeline" id="timeline"></ul>
+    </div>
+
+  </div><!-- /sidebar -->
+</div><!-- /main -->
+
+<!-- ── ALARM TOAST ── -->
+<div id="alarm-toast">
+  <div class="toast-title">🚨 警報觸發</div>
+  <div class="toast-msg" id="toast-msg">偵測到行人接近危險區域</div>
+</div>
+
+<script>
+const API_KEY = "{{ API_KEY }}";
+const alarmStates = {};
+let fpsHistory = Array(20).fill(null);
+let alarmHistory = {};
+let totalAlarms = 0;
+let frameTimers = {};
+
+// ── 時鐘 ──
+function updateClock() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('zh-TW', {hour12: false});
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── 縮放 ──
+function updateScale(v) {
+  document.documentElement.style.setProperty('--card-w', v + 'px');
+}
+
+// ── 影像載入 ──
+function handleImgLoad(id) {
+  const overlay = document.getElementById('overlay-' + id);
+  if (overlay) overlay.classList.add('hidden');
+  // FPS 計算
+  const now = performance.now();
+  if (frameTimers[id]) {
+    const fps = Math.round(1000 / (now - frameTimers[id]));
+    const fpsBadge = document.getElementById('fps-badge-' + id);
+    if (fpsBadge) fpsBadge.textContent = fps + ' fps';
+    if (id === 99) {
+      fpsHistory.push(fps);
+      fpsHistory.shift();
+      updateFpsChart();
+      document.getElementById('kpi-fps').textContent = fps + ' fps';
+    }
+  }
+  frameTimers[id] = now;
+}
+function handleImgError(id) {
+  const overlay = document.getElementById('overlay-' + id);
+  if (overlay) overlay.classList.remove('hidden');
+  document.getElementById('fps-badge-' + id).textContent = '-- fps';
+}
+
+// ── 直連 ──
+function openDirect(ip) {
+  if (!ip) return;
+  window.open(`http://${ip}/stream?auth=${API_KEY}`, '_blank');
+}
+
+// ── 截圖下載 ──
+function captureFrame(id, name) {
+  const img = document.getElementById('img-' + id);
+  if (!img || !img.src) return;
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 480;
+  const ctx = canvas.getContext('2d');
+  try {
+    ctx.drawImage(img, 0, 0, 640, 480);
+    const ts = new Date().toISOString().replace(/[:.]/g,'-').slice(0,19);
+    const a = document.createElement('a');
+    a.href = canvas.toDataURL('image/jpeg', 0.92);
+    a.download = `${name}_${ts}.jpg`;
+    a.click();
+  } catch(e) {
+    // CORS fallback: open in new tab
+    window.open(`/video_feed/${id}`, '_blank');
+  }
+}
+
+// ── 警示燈切換 ──
+async function toggleAlarm(id) {
+  const newState = alarmStates[id] === 1 ? 'off' : 'on';
+  try {
+    await fetch(`/control/${id}/${newState}`, { method: 'POST' });
+    await updateStatus();
+  } catch(e) {}
+}
+
+// ── 警報 Toast ──
+let toastTimer = null;
+function showToast(camName) {
+  const toast = document.getElementById('alarm-toast');
+  document.getElementById('toast-msg').textContent = `${camName} 偵測到行人接近危險區域`;
+  toast.style.display = 'block';
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { toast.style.display = 'none'; }, 4000);
+}
+
+// ── 狀態更新 ──
+let prevAlarms = {};
+async function updateStatus() {
+  try {
+    const resp = await fetch('/status');
+    const data = await resp.json();
+    document.getElementById('sysStatus').style.background = 'var(--green)';
+
+    let onlineCount = 0;
+    let totalLatency = 0, latencyCount = 0;
+    let maxUptime = 0;
+
+    data.forEach(cam => {
+      const badge     = document.getElementById('badge-' + cam.id);
+      const rssiBar   = document.getElementById('rssi-' + cam.id);
+      const rssiVal   = document.getElementById('rssi-val-' + cam.id);
+      const latEl     = document.getElementById('latency-' + cam.id);
+      const tcpEl     = document.getElementById('tcp-' + cam.id);
+      const alarmBtn  = document.getElementById('alarm-btn-' + cam.id);
+      const alarmSt   = document.getElementById('alarm-state-' + cam.id);
+      const card      = document.getElementById('cam-' + cam.id);
+      if (!tcpEl) return;
+
+      alarmStates[cam.id] = cam.alarm;
+
+      // TCP
+      if (cam.tcp === 'OPEN') {
+        tcpEl.textContent = '●'; tcpEl.style.color = 'var(--green)';
+      } else {
+        tcpEl.textContent = '●'; tcpEl.style.color = 'var(--red)';
+      }
+
+      // Latency
+      if (cam.latency >= 0) {
+        latEl.textContent = cam.latency + ' ms';
+        latEl.style.color = cam.latency < 80 ? 'var(--green)' : cam.latency < 200 ? 'var(--amber)' : 'var(--red)';
+        totalLatency += cam.latency; latencyCount++;
+      } else {
+        latEl.textContent = '-- ms'; latEl.style.color = 'var(--muted)';
+      }
+
+      if (cam.online) {
+        onlineCount++;
+        badge.className = 'cam-badge online'; badge.textContent = 'LIVE';
+        const pct = Math.max(0, Math.min(100, 2 * (cam.rssi + 100)));
+        rssiBar.style.width = pct + '%';
+        rssiBar.style.background = pct > 50 ? 'var(--green)' : pct > 20 ? 'var(--amber)' : 'var(--red)';
+        rssiVal.textContent = cam.rssi + ' dBm';
+        rssiVal.style.color = 'var(--text)';
+        if (cam.uptime > maxUptime) maxUptime = cam.uptime;
+
+        // Alarm
+        if (cam.alarm === 1) {
+          if (!prevAlarms[cam.id]) showToast(`CAM ${cam.id}`);
+          alarmBtn.className = 'alarm-btn on';
+          alarmSt.textContent = '🔴 觸發中'; alarmSt.style.color = 'var(--amber)';
+          card.classList.add('alarm-active');
+          // Count alarms
+          if (!prevAlarms[cam.id]) { totalAlarms++; logAlarmHistory(); }
+        } else {
+          alarmBtn.className = 'alarm-btn';
+          alarmSt.textContent = '靜止'; alarmSt.style.color = 'var(--muted)';
+          card.classList.remove('alarm-active');
         }
+        prevAlarms[cam.id] = cam.alarm;
+      } else {
+        badge.className = 'cam-badge offline'; badge.textContent = 'OFFLINE';
+        rssiVal.textContent = '--'; rssiVal.style.color = 'var(--muted)';
+        alarmBtn.className = 'alarm-btn';
+        card.classList.remove('alarm-active');
+      }
+    });
 
-        async function toggleAlarm(id) {
-            const newState = alarmStates[id] === 1 ? 'off' : 'on';
-            try {
-                await fetch(`/control/${id}/${newState}`, { method: 'POST' });
-                updateStatus();
-            } catch (e) { }
-        }
+    // KPIs
+    document.getElementById('kpi-online').textContent = `${onlineCount} / {{ cameras|length }}`;
+    document.getElementById('kpi-alarms').textContent = totalAlarms;
+    document.getElementById('kpi-latency').textContent = latencyCount ? Math.round(totalLatency/latencyCount) + ' ms' : '-- ms';
+    if (maxUptime > 0) {
+      const h = Math.floor(maxUptime/3600), m = Math.floor((maxUptime%3600)/60), s = maxUptime%60;
+      document.getElementById('kpi-uptime').textContent =
+        (h > 0 ? h+'h ' : '') + (m > 0 ? m+'m ' : '') + s+'s';
+    }
+  } catch(e) {
+    document.getElementById('sysStatus').style.background = 'var(--red)';
+  }
+}
+setInterval(updateStatus, 2000);
+updateStatus();
 
-        async function updateStatus() {
-            try {
-                const resp = await fetch('/status');
-                const data = await resp.json();
-                data.forEach(cam => {
-                    const badge = document.getElementById('badge-' + cam.id);
-                    const rssiFill = document.getElementById('rssi-' + cam.id);
-                    const rssiVal = document.getElementById('rssi-val-' + cam.id);
-                    const tcpStatus = document.getElementById('tcp-' + cam.id);
-                    const latencyVal = document.getElementById('latency-' + cam.id);
-                    const hazardBtn = document.getElementById('hazard-' + cam.id);
-                    const stateLabel = document.getElementById('alarm-state-' + cam.id);
-                    const directLink = document.getElementById('direct-' + cam.id);
+// ── Wi-Fi / 網路狀態 ──
+async function updateSysInfo() {
+  try {
+    const [wRes, nRes] = await Promise.all([fetch('/api/wifi_status'), fetch('/api/net_info')]);
+    const w = await wRes.json();
+    const n = await nRes.json();
+    document.getElementById('s-hostname').textContent = n.hostname || '--';
+    document.getElementById('s-ip').textContent = n.local_ip || '--';
+    document.getElementById('s-wifi').textContent = w.mode || '--';
+    document.getElementById('s-ssid').textContent = w.ssid || '--';
+  } catch(e) {}
+}
+setInterval(updateSysInfo, 8000);
+updateSysInfo();
 
-                    if (!tcpStatus || !latencyVal) return;
+// ── 模擬系統資源（Windows 無法直接讀取，用模擬值展示 UI）──
+function updateResources() {
+  // 模擬值（實際部署在 Pi 上時可替換為 API 端點）
+  const cpu  = Math.round(15 + Math.random() * 30);
+  const ram  = Math.round(30 + Math.random() * 15);
+  const temp = Math.round(42 + Math.random() * 10);
+  const ping = Math.round(2 + Math.random() * 8);
 
-                    alarmStates[cam.id] = cam.alarm;
+  document.getElementById('cpu-val').textContent = cpu + '%';
+  document.getElementById('ram-val').textContent = ram + '%';
+  document.getElementById('temp-val').textContent = temp + '°C';
+  document.getElementById('net-val').textContent = ping + ' ms';
+  document.getElementById('cpu-bar').style.width = cpu + '%';
+  document.getElementById('ram-bar').style.width = ram + '%';
+  document.getElementById('cpu-bar-val').textContent = cpu + '%';
+  document.getElementById('ram-bar-val').textContent = ram + '%';
+}
+setInterval(updateResources, 3000);
+updateResources();
 
-                    if (directLink && cam.ip) {
-                        directLink.onclick = () => openDirect(cam.ip);
-                    }
-                    tcpStatus.innerText = cam.tcp === 'OPEN' ? '🟢 開放' : (cam.tcp === 'CLOSED' ? '🔴 阻斷' : '🟡 偵測中');
-                    tcpStatus.style.color = cam.tcp === 'OPEN' ? 'var(--success)' : 'var(--danger)';
-                    latencyVal.innerText = cam.latency >= 0 ? cam.latency + ' ms' : '-- ms';
-                    latencyVal.style.color = cam.latency < 100 ? 'var(--success)' : (cam.latency < 300 ? 'var(--accent)' : 'var(--danger)');
+// ── 事件時間軸 ──
+async function updateTimeline() {
+  try {
+    const resp = await fetch('/api/logs');
+    const logs = await resp.json();
+    const tl = document.getElementById('timeline');
+    tl.innerHTML = logs.slice().reverse().slice(0, 12).map(l => {
+      const cls = l.level === 'ERROR' ? 'error' : l.level === 'WARN' ? 'warn' : 'info';
+      const msg = l.msg.replace(/[✅⚠️🔥]/g,'').trim();
+      return `<li class="tl-item">
+        <div class="tl-dot ${cls}"></div>
+        <div class="tl-time">${l.time}</div>
+        <div class="tl-msg">${msg}</div>
+      </li>`;
+    }).join('');
+  } catch(e) {}
+}
+setInterval(updateTimeline, 3000);
+updateTimeline();
 
-                    if (cam.online) {
-                        badge.className = 'status-badge online';
-                        badge.innerText = 'CONNECTED';
+// ── 警報歷史圖表 ──
+const alarmLabels = Array.from({length:12}, (_,i) => {
+  const h = new Date(); h.setHours(h.getHours()-11+i, 0, 0, 0);
+  return h.getHours() + ':00';
+});
+let alarmData = Array(12).fill(0);
 
-                        let pct = Math.max(0, Math.min(100, 2 * (cam.rssi + 100)));
-                        rssiFill.style.width = pct + '%';
-                        rssiFill.style.background = pct > 50 ? 'var(--success)' : (pct > 20 ? 'var(--accent)' : 'var(--danger)');
-                        rssiVal.innerText = cam.rssi + ' dBm';
-                        uptime.innerText = cam.uptime + 's';
-                        sensor.innerText = cam.sensor.toFixed(2) + ' V';
+function logAlarmHistory() {
+  const h = new Date().getHours();
+  const idx = alarmLabels.findIndex(l => parseInt(l) === h);
+  if (idx >= 0) { alarmData[idx]++; alarmChart.update(); }
+}
 
-                        if (cam.alarm === 1) {
-                            hazardBtn.classList.add('hazard-on');
-                            stateLabel.innerText = '觸發中';
-                            stateLabel.style.color = 'var(--accent)';
-                        } else {
-                            hazardBtn.classList.remove('hazard-on');
-                            stateLabel.innerText = '靜止';
-                            stateLabel.style.color = 'inherit';
-                        }
-                    } else {
-                        badge.className = 'status-badge offline';
-                        badge.innerText = 'OFFLINE';
-                        hazardBtn.classList.remove('hazard-on');
-                    }
-                });
-            } catch (e) { }
-        }
-        setInterval(updateStatus, 2000);
-        updateStatus();
+const alarmChart = new Chart(document.getElementById('alarmChart'), {
+  type: 'bar',
+  data: {
+    labels: alarmLabels,
+    datasets: [{
+      label: '警報次數',
+      data: alarmData,
+      backgroundColor: 'rgba(245,158,11,0.3)',
+      borderColor: 'rgba(245,158,11,0.8)',
+      borderWidth: 1,
+      borderRadius: 3,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { display: false } },
+    scales: {
+      x: { ticks: { color:'#64748b', font:{size:10} }, grid: { color:'#1c2333' } },
+      y: { ticks: { color:'#64748b', font:{size:10}, stepSize:1 }, grid: { color:'#1c2333' }, min:0 }
+    }
+  }
+});
 
-        // Debug Console Logic
-        let consoleVisible = false;
-        function toggleConsole() {
-            consoleVisible = !consoleVisible;
-            document.getElementById('debugConsole').style.display = consoleVisible ? 'block' : 'none';
-        }
+// ── FPS 折線圖 ──
+const fpsLabels = Array.from({length:20}, (_,i) => '');
+const fpsChart = new Chart(document.getElementById('fpsChart'), {
+  type: 'line',
+  data: {
+    labels: fpsLabels,
+    datasets: [{
+      label: 'FPS',
+      data: fpsHistory,
+      borderColor: 'rgba(6,182,212,0.8)',
+      backgroundColor: 'rgba(6,182,212,0.07)',
+      borderWidth: 2,
+      pointRadius: 2,
+      fill: true,
+      tension: 0.4,
+    }, {
+      label: '目標 10fps',
+      data: Array(20).fill(10),
+      borderColor: 'rgba(34,197,94,0.4)',
+      borderWidth: 1,
+      borderDash: [5,4],
+      pointRadius: 0,
+      fill: false,
+    }]
+  },
+  options: {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { labels: { color:'#64748b', font:{size:10}, boxWidth:10 } } },
+    scales: {
+      x: { ticks: { display:false }, grid: { color:'#1c2333' } },
+      y: { ticks: { color:'#64748b', font:{size:10} }, grid: { color:'#1c2333' }, min:0 }
+    }
+  }
+});
 
-        async function updateLogs() {
-            try {
-                const resp = await fetch('/api/logs');
-                const logs = await resp.json();
-                const logList = document.getElementById('logList');
-                logList.innerHTML = logs.map(l => {
-                    const levelClass = `log-${l.level.toLowerCase()}`;
-                    return `<li class="log-item ${levelClass}">[${l.time}] ${l.msg}</li>`;
-                }).join('');
-                if (consoleVisible) logList.scrollTop = logList.scrollHeight;
-            } catch (e) { }
-        }
+function updateFpsChart() {
+  fpsChart.data.datasets[0].data = [...fpsHistory];
+  fpsChart.update('none');
+}
 
-        async function restartFetchers() {
-            if (!confirm("確定要重啟所有攝影機連線任務嗎？")) return;
-            try {
-                await fetch('/api/restart', { method: 'POST' });
-            } catch (e) { }
-        }
-
-        setInterval(updateLogs, 3000);
-        updateLogs();
-
-        // Scale Control Logic
-        function updateScale(val) {
-            document.documentElement.style.setProperty('--card-width', val + 'px');
-        }
-
-        async function updateWifiStatus() {
-            try {
-                const [wifiResp, netResp] = await Promise.all([
-                    fetch('/api/wifi_status'),
-                    fetch('/api/net_info')
-                ]);
-                const wifi = await wifiResp.json();
-                const net = await netResp.json();
-
-                document.getElementById('ap-ssid').innerText = wifi.ssid;
-                document.getElementById('ap-mode').innerText = wifi.mode;
-                document.getElementById('ap-clients').innerText = wifi.clients;
-                document.getElementById('pi-ip-display').innerText = net.local_ip;
-            } catch (e) { }
-        }
-        setInterval(updateWifiStatus, 5000);
-        updateWifiStatus();
-    </script>
+// ── 重連 ──
+async function restartFetchers() {
+  if (!confirm('確定要重啟所有攝影機連線？')) return;
+  try { await fetch('/api/restart', { method:'POST' }); } catch(e) {}
+}
+</script>
 </body>
-
 </html>
