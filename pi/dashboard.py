@@ -75,12 +75,20 @@ is_shutting_down = False
 SRC_PTS = [[0, 480], [640, 480], [640, 0], [0, 0]]
 DST_PTS = [[0, 5],   [5, 5],     [5, 0],   [0, 0]]
 
-# Thresholds
+# Thresholds — 行人意圖偵測
 INTENT_THRESHOLD_DIST = 1.2
 INTENT_THRESHOLD_VEL  = 0.4
 INTENT_MIN_FRAMES     = 4
-ALARM_DURATION        = 5
+ALARM_DURATION        = 5      # 行人危險警報持續時間 (秒)
 CURB_Y_THRESHOLD      = 2.5
+
+# Thresholds — 車輛偵測（甲测點 34 讀取霧爾感應器電壓）
+VEHICLE_ALARM_DURATION  = 2.5  # PDF 說明：GPIO 閃爍警示行人 2.5 秒
+# 霧爾感應器觸發门滝（Volt）：
+#   GPIO34 退選（analogRead(34) * 3.3 / 4095）
+#   無車輛時展示背景磁場，具體门滝需現場校準
+HALL_VEHICLE_THRESHOLD  = 2.0  # 超過此電壓表示偵測到車輛磁場
+HALL_BASELINE_THRESHOLD = 0.5  # 低於此就是應是沒車磁場（或斷線）
 
 class HomographyTransformer:
     def __init__(self, src_pts, dst_pts):
@@ -176,11 +184,82 @@ class PedestrianTracker:
         return is_intent
 
 
+class VehicleDetector:
+    """
+    霧爾感應器車輛偵測器 — 對應 PDF《前方來車請注意》核心功能
+
+    ESP32 韋體第 92 行：
+        float sensor_val = analogRead(34) * (3.3 / 4095.0);
+    讀取 GPIO34 的類比電壓，回傳於 /status 的 sensor 欄位。
+
+    霧爾感應器偵測原理：
+        - 車輛經過時磁場變動 → sensor 電壓升高超過 HALL_VEHICLE_THRESHOLD
+        - 無車時 sensor 處於背景電壓準位
+    """
+    def __init__(self, cam_id: int, alarm_url: str):
+        self.cam_id = cam_id
+        self.alarm_url = alarm_url
+        self.last_alarm_time: float = 0
+        self._alarm_lock: bool = False
+
+    def _send_alarm_request(self, state: str):
+        try:
+            import requests as req
+            url = f"{self.alarm_url}?state={state}&auth={API_KEY}"
+            req.get(url, timeout=1.5)
+        except Exception as e:
+            print(f"[VEHICLE ALARM CAM{self.cam_id}] 請求失敗: {e}")
+        finally:
+            self._alarm_lock = False
+
+    def check_hall_sensor(self, sensor_val: float) -> bool:
+        """
+        嘗試從霧爾感應器電壓判斷是否有車輛經過。
+        由 poll_status 循環呼叫。
+        回傳是否正在警報。
+        """
+        now = time.time()
+        vehicle_detected = sensor_val >= HALL_VEHICLE_THRESHOLD
+
+        if vehicle_detected:
+            # 車輛偵測到 → 在冷卻期外才重新觸發
+            if not self._alarm_lock and (
+                self.last_alarm_time == 0
+                or now - self.last_alarm_time >= VEHICLE_ALARM_DURATION
+            ):
+                print(f">>> HALL SENSOR CAM{self.cam_id}: Vehicle detected "
+                      f"(sensor={sensor_val:.2f}V >= {HALL_VEHICLE_THRESHOLD}V), Alarm ON ({VEHICLE_ALARM_DURATION}s)")
+                self._alarm_lock = True
+                self.last_alarm_time = now
+                threading.Thread(
+                    target=self._send_alarm_request, args=("on",), daemon=True
+                ).start()
+                add_log(f"[CAM {self.cam_id}] 霧爾偵測到車輛 (sensor={sensor_val:.2f}V)", "WARN")
+
+        # 到期自動關閉
+        if self.last_alarm_time > 0 and now - self.last_alarm_time >= VEHICLE_ALARM_DURATION:
+            if not self._alarm_lock:
+                self._alarm_lock = True
+                self.last_alarm_time = 0
+                threading.Thread(
+                    target=self._send_alarm_request, args=("off",), daemon=True
+                ).start()
+
+        return self.alarm_active
+
+    @property
+    def alarm_active(self) -> bool:
+        return self.last_alarm_time > 0 and (
+            time.time() - self.last_alarm_time < VEHICLE_ALARM_DURATION
+        )
+
+
 # ── 全域 AI 資源 ──
 _yolo_model    = None
 _yolo_lock     = threading.Lock()
 _transformer   = HomographyTransformer(SRC_PTS, DST_PTS)
-_trackers: dict[int, PedestrianTracker] = {}   # cam_id -> tracker
+_trackers: dict[int, PedestrianTracker] = {}         # cam_id -> 行人 tracker
+_vehicle_detectors: dict[int, VehicleDetector] = {}  # cam_id -> 車輛偵測器
 _thread_pool   = concurrent.futures.ThreadPoolExecutor(max_workers=2)
 
 def get_yolo_model():
@@ -203,6 +282,8 @@ def get_yolo_model():
 def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
     """
     同步 AI 推論 — 在 ThreadPoolExecutor 中執行，不阻塞 Event Loop。
+    只偵測行人（classes=[0]）。
+    車輛偵測由霧爾感應器負責，在 poll_status 中處理。
     回傳帶有偵測框的 JPEG bytes。
     """
     model = get_yolo_model()
@@ -219,6 +300,7 @@ def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
 
     tracker.reset_alarm_if_needed()
 
+    # ── 偵測行人（YOLO）：車輛偵測由霧爾感應器負責，不在此處 ──
     try:
         results = model.track(
             frame, persist=True, classes=[0],
@@ -229,37 +311,59 @@ def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
         return jpg_bytes
 
     person_count = 0
-    if results[0].boxes.id is not None:
-        boxes = results[0].boxes.xyxy.cpu().numpy()
-        ids   = results[0].boxes.id.cpu().numpy().astype(int)
-        person_count = len(ids)
 
-        for box, track_id in zip(boxes, ids):
-            foot_x = (box[0] + box[2]) / 2
-            foot_y = box[3]
+    if results[0].boxes is not None and len(results[0].boxes) > 0:
+        boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
+        cls_ids    = results[0].boxes.cls.cpu().numpy().astype(int)
+        track_ids  = (
+            results[0].boxes.id.cpu().numpy().astype(int)
+            if results[0].boxes.id is not None
+            else [None] * len(boxes_xyxy)
+        )
+
+        for box, cls_id, track_id in zip(boxes_xyxy, cls_ids, track_ids):
+            if cls_id != 0:
+                continue  # 安全過濾，只處理行人
+            x1, y1, x2, y2 = int(box[0]), int(box[1]), int(box[2]), int(box[3])
+            cx, cy = (x1 + x2) // 2, y2  # 腳部中心
+            person_count += 1
+
             try:
-                gx, gy = _transformer.transform(foot_x, foot_y)
-                is_danger = tracker.update(track_id, (gx, gy))
+                gx, gy = _transformer.transform(cx, cy)
+                is_danger = tracker.update(track_id, (gx, gy)) if track_id is not None else False
             except Exception:
                 is_danger = False
 
-            color = (0, 0, 255) if is_danger else (0, 255, 0)
-            # 畫偵測框
-            cv2.rectangle(frame, (int(box[0]), int(box[1])), (int(box[2]), int(box[3])), color, 2)
-            # 畫腳部圓點
-            cv2.circle(frame, (int(foot_x), int(foot_y)), 5, color, -1)
-            # 標籤
-            label = f"ID:{track_id}"
+            # 顏色：紅=危險行人, 綠=安全行人
+            color = (0, 0, 255) if is_danger else (0, 220, 80)
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+            cv2.circle(frame, (cx, cy), 5, color, -1)
+            label = f"P:{track_id}" if track_id is not None else "PERSON"
             if is_danger:
                 label += " DANGER"
-            cv2.putText(frame, label, (int(box[0]), int(box[1]) - 6),
+            cv2.putText(frame, label, (x1, y1 - 6),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
 
-    # 更新 AI 狀態快取
+    # ── 霧爾車輛警報狀態（從 ai_status_cache 讀取，由 poll_status 更新）──
+    vehicle_alarm = ai_status_cache.get(cam_id, {}).get("vehicle_alarm", 0) == 1
+
+    if vehicle_alarm:
+        cv2.rectangle(frame, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 220), 4)
+        cv2.putText(frame, "!! VEHICLE ALERT - WARN PEDESTRIANS !!",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 0, 255), 2)
+
+    if tracker.alarm_active:
+        cv2.putText(frame, "!! PEDESTRIAN DANGER !!",
+                    (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (0, 80, 255), 2)
+
+    # ── 更新 AI 狀態快取（保留 vehicle_alarm 不覆寫，由 poll_status 負責更新）──
+    prev = ai_status_cache.get(cam_id, {})
     ai_status_cache[cam_id] = {
-        "person_count": person_count,
-        "alarm": 1 if tracker.alarm_active else 0,
-        "ai_enabled": True,
+        "person_count":  person_count,
+        "vehicle_count": prev.get("vehicle_count", 0),   # 從霧爾感應器累計
+        "vehicle_alarm": prev.get("vehicle_alarm", 0),   # 由 poll_status 更新
+        "alarm":         1 if (tracker.alarm_active or vehicle_alarm) else 0,
+        "ai_enabled":    True,
     }
 
     # 編碼回 JPEG
@@ -390,12 +494,28 @@ async def fetch_camera_data(cam_id: int, ip: str):
                         data["latency"] = latency
                         data["tcp"] = "OPEN"
                         status_cache[cam_id] = data
+
+                        # ── 霍爾感應器車輛偵測（PDF 核心：來車 → 警示行人）──
+                        # ESP32 固件：float sensor_val = analogRead(34) * (3.3 / 4095.0);
+                        sensor_val = data.get("sensor", 0.0)
+                        vd = _vehicle_detectors.get(cam_id)
+                        if vd:
+                            vehicle_alarm = vd.check_hall_sensor(sensor_val)
+                            # 同步更新 ai_status_cache 的車輛警報狀態
+                            prev = ai_status_cache.get(cam_id, {})
+                            ai_status_cache[cam_id] = {
+                                **prev,
+                                "vehicle_alarm": 1 if vehicle_alarm else 0,
+                                "vehicle_count": prev.get("vehicle_count", 0) + (1 if vehicle_alarm else 0),
+                                "alarm": 1 if (vehicle_alarm or prev.get("alarm", 0)) else 0,
+                            }
                     else:
                         add_log(f"[CAM {cam_id}] 認證失敗: HTTP {resp.status_code}", "ERROR")
                         status_cache[cam_id] = {"error": f"HTTP {resp.status_code}", "tcp": "OPEN"}
                 except Exception:
                     status_cache[cam_id] = {"error": "Timeout", "tcp": "CLOSED"}
                 await asyncio.sleep(5)
+
 
     async def poll_video():
         loop = asyncio.get_event_loop()
@@ -485,12 +605,20 @@ zc_instance  = None
 
 
 def setup_trackers():
-    """為每台攝影機建立獨立的 PedestrianTracker"""
+    """為每台攝影機建立獨立的 PedestrianTracker 與 VehicleDetector"""
     for cam in config["cameras"]:
         cam_id = cam["id"]
         alarm_url = f"http://{cam['ip']}/alarm"
         _trackers[cam_id] = PedestrianTracker(cam_id, alarm_url)
-        ai_status_cache[cam_id] = {"person_count": 0, "alarm": 0, "ai_enabled": YOLO_AVAILABLE}
+        _vehicle_detectors[cam_id] = VehicleDetector(cam_id, alarm_url)
+        ai_status_cache[cam_id] = {
+            "person_count":  0,
+            "vehicle_count": 0,
+            "vehicle_alarm": 0,
+            "alarm":         0,
+            "ai_enabled":    YOLO_AVAILABLE,
+        }
+
 
 
 def start_all_fetchers():

@@ -102,13 +102,24 @@ async def get_status(request: Request):
     verify_auth(request)
     uptime = int(time.time() - start_time)
     rssi   = -50 - (uptime % 10)
-    sensor = round(1.2 + (uptime % 5) * 0.1, 2)
+
+    # 模擬霍爾感應器（GPIO 34 類比讀值換算電壓）
+    # 正常背景電壓 ~0.3V；車輛經過時短暫升至 ~2.5V（每 15 秒模擬一次）
+    cycle = uptime % 15
+    if cycle < 2:
+        # 車輛通過的磁場峰值（持續約 2 秒）
+        hall_voltage = 2.5
+    else:
+        # 背景磁場
+        hall_voltage = 0.3 + (cycle % 3) * 0.05
+
     return {
         "rssi":   rssi,
         "uptime": uptime,
-        "sensor": sensor,
+        "sensor": round(hall_voltage, 2),
         "alarm":  alarm_active,
     }
+
 
 
 @app.get("/alarm")
