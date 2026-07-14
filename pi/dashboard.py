@@ -837,15 +837,18 @@ async def restart_fetchers():
 
 @app.get("/api/ai_status")
 async def get_ai_status():
-    """回傳每台攝影機的 AI 辨識狀態（人數、警報）"""
+    """回傳每台攝影機的 AI 辨識狀態（含霍爾感測器電壓）"""
     result = []
     for cam in config["cameras"]:
-        cam_id = cam["id"]
+        cam_id  = cam["id"]
         ai_info = ai_status_cache.get(cam_id, {"person_count": 0, "alarm": 0, "ai_enabled": YOLO_AVAILABLE})
+        # 從 status_cache 讀取霍爾感測器電壓（ESP32 /status 回傳的 sensor 欄位）
+        sensor_v = status_cache.get(cam_id, {}).get("sensor", None)
         result.append({
-            "id": cam_id,
+            "id":   cam_id,
             "name": cam["name"],
             **ai_info,
+            "sensor_voltage": round(sensor_v, 2) if sensor_v is not None else None,
         })
     return result
 
