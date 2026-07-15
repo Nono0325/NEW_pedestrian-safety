@@ -124,18 +124,22 @@ class DualTriggerAlarmController:
 
     def update_vehicle(self, present: bool, sensor_val: float = 0.0):
         """由 poll_status 呼叫，更新霍爾感測器狀態"""
+        log_msg = None
         with self._lock:
             was = self._vehicle_present
             if present:
                 self._vehicle_present = True
                 self._vehicle_expires = time.time() + VEHICLE_ALARM_DURATION
                 if not was:
-                    add_log(f"[CAM {self.cam_id}] 霍爾感測：偵測到車輛 (sensor={sensor_val:.2f}V)", "WARN")
+                    log_msg = (f"[CAM {self.cam_id}] 霍爾感測：偵測到車輛 (sensor={sensor_val:.2f}V)", "WARN")
             else:
                 # 保持 True 直到到期
                 if self._vehicle_expires > 0 and time.time() >= self._vehicle_expires:
                     self._vehicle_present = False
                     self._vehicle_expires = 0.0
+        # 在鎖外記錄日誌，避免持鎖期間呼叫外部函式
+        if log_msg:
+            add_log(*log_msg)
         self._evaluate()
 
     def update_pedestrian(self, danger: bool):
@@ -147,19 +151,25 @@ class DualTriggerAlarmController:
     # ── 內部評估邏輯 ──
 
     def _evaluate(self):
-        """根據兩個條件決定是否送出 alarm 請求（不持鎖呼叫）"""
+        """根據兩個條件決定是否送出 alarm 請求（鎖外啟動 thread）"""
         with self._lock:
             should_alarm = self._vehicle_present and self._pedestrian_danger
-            if should_alarm and not self._alarm_on:
+            need_on  = should_alarm and not self._alarm_on
+            need_off = not should_alarm and self._alarm_on
+            if need_on:
                 self._alarm_on = True
-                print(f">>> DUAL TRIGGER CAM{self.cam_id}: 車輛+危險行人 → Alarm ON")
-                add_log(f"[CAM {self.cam_id}] 雙重觸發：車輛 + 危險行人 → 警示 ON", "WARN")
-                threading.Thread(target=self._send_request, args=("on",), daemon=True).start()
-            elif not should_alarm and self._alarm_on:
+            elif need_off:
                 self._alarm_on = False
-                print(f">>> DUAL TRIGGER CAM{self.cam_id}: 條件解除 → Alarm OFF")
-                add_log(f"[CAM {self.cam_id}] 條件解除 → 警示 OFF", "INFO")
-                threading.Thread(target=self._send_request, args=("off",), daemon=True).start()
+
+        # 在鎖外執行 IO 和日誌，避免死鎖
+        if need_on:
+            print(f">>> DUAL TRIGGER CAM{self.cam_id}: 車輛+危險行人 → Alarm ON")
+            add_log(f"[CAM {self.cam_id}] 雙重觸發：車輛 + 危險行人 → 警示 ON", "WARN")
+            threading.Thread(target=self._send_request, args=("on",), daemon=True).start()
+        elif need_off:
+            print(f">>> DUAL TRIGGER CAM{self.cam_id}: 條件解除 → Alarm OFF")
+            add_log(f"[CAM {self.cam_id}] 條件解除 → 警示 OFF", "INFO")
+            threading.Thread(target=self._send_request, args=("off",), daemon=True).start()
 
     def _send_request(self, state: str):
         try:
@@ -171,11 +181,15 @@ class DualTriggerAlarmController:
 
     def tick(self):
         """定期呼叫以處理霍爾感測器到期邏輯"""
+        expired = False
         with self._lock:
             if self._vehicle_present and self._vehicle_expires > 0 and time.time() >= self._vehicle_expires:
                 self._vehicle_present = False
                 self._vehicle_expires = 0.0
-                add_log(f"[CAM {self.cam_id}] 霍爾感測：車輛離開（到期）", "INFO")
+                expired = True
+        # 在鎖外記錄日誌
+        if expired:
+            add_log(f"[CAM {self.cam_id}] 霍爾感測：車輛離開（到期）", "INFO")
         self._evaluate()
 
     # ── 唯讀屬性 ──
@@ -536,14 +550,16 @@ async def fetch_camera_data(cam_id: int, ip: str):
                         controller   = _alarm_controllers.get(cam_id)
                         if controller:
                             vehicle_now = sensor_val >= HALL_VEHICLE_THRESHOLD
-                            controller.update_vehicle(vehicle_now, sensor_val)
-                            # 同步更新 ai_status_cache 車輛欄位
+                            # 記錄車輛首次被偵測（避免無限累加）
                             prev = ai_status_cache.get(cam_id, {})
+                            was_vehicle = prev.get("vehicle_present", 0) == 1
+                            controller.update_vehicle(vehicle_now, sensor_val)
                             ai_status_cache[cam_id] = {
                                 **prev,
                                 "vehicle_present": 1 if controller.vehicle_present else 0,
                                 "vehicle_alarm":   1 if controller.vehicle_present else 0,
-                                "vehicle_count":   prev.get("vehicle_count", 0) + (1 if vehicle_now else 0),
+                                # 僅在車輛首次出現時計數 +1，不重複累加
+                                "vehicle_count":   prev.get("vehicle_count", 0) + (1 if vehicle_now and not was_vehicle else 0),
                                 "alarm":           1 if controller.alarm_active else 0,
                             }
                     else:
@@ -924,7 +940,12 @@ if __name__ == "__main__":
             print("\n[FORCE] 強制退出進程...")
             os._exit(1)
         print("\n[INFO] 正在關閉系統資源 (再按一次 Ctrl+C 可強制退出)...")
-        asyncio.create_task(server.shutdown())
+        # 在 signal handler 中使用 thread-safe 方式呼叫 coroutine
+        try:
+            loop = asyncio.get_running_loop()
+            loop.call_soon_threadsafe(lambda: asyncio.ensure_future(server.shutdown()))
+        except RuntimeError:
+            pass  # 若 event loop 已停止則忽略
 
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, handle_exit)
