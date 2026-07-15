@@ -149,12 +149,12 @@ python stream4_benchmark.py
 
 **方法一：自動化安裝腳本（推薦）**
 ```bash
-curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/Nono0325/NEW_pedestrian-safety/main/install.sh | bash
 ```
 
 **方法二：手動安裝**
 ```bash
-git clone https://github.com/Nono0325/pedestrian-safety.git
+git clone https://github.com/Nono0325/NEW_pedestrian-safety.git
 cd pedestrian-safety
 python3 -m venv venv
 source venv/bin/activate
@@ -181,7 +181,7 @@ chmod +x start.sh
 bash update.sh
 
 # 方式二：從網路直接更新（不需要進入目錄）
-curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/update.sh | bash
+curl -sSL https://raw.githubusercontent.com/Nono0325/NEW_pedestrian-safety/main/update.sh | bash
 ```
 
 `update.sh` 會自動：

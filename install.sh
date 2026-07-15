@@ -34,7 +34,7 @@ PROJECT_DIR="pedestrian-safety"
 if [ ! -d ".git" ]; then
     echo "[2/4] 正在從 GitHub 下載程式碼..."
     if [ ! -d "$PROJECT_DIR" ]; then
-        git clone https://github.com/Nono0325/pedestrian-safety.git
+        git clone https://github.com/Nono0325/NEW_pedestrian-safety.git
     fi
     cd "$PROJECT_DIR"
 fi
@@ -106,7 +106,7 @@ echo ""
 echo "日後更新到最新版（一鍵更新）："
 echo "  bash update.sh"
 echo "  或："
-echo "  curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/update.sh | bash"
+echo "  curl -sSL https://raw.githubusercontent.com/Nono0325/NEW_pedestrian-safety/main/update.sh | bash"
 echo ""
 echo "注意事項:"
 echo "  - 執行前請確保 pi/config.json 中的 ESP32 IP 已填正確"

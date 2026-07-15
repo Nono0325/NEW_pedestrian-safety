@@ -3,7 +3,7 @@
 # 先行一步 (One Step Ahead) — 一鍵更新到最新版
 # ==========================================================
 # 使用方式（在樹莓派上執行）：
-#   curl -sSL https://raw.githubusercontent.com/Nono0325/pedestrian-safety/main/update.sh | bash
+#   curl -sSL https://raw.githubusercontent.com/Nono0325/NEW_pedestrian-safety/main/update.sh | bash
 # 或已有專案目錄：
 #   bash update.sh
 # ==========================================================
@@ -12,7 +12,7 @@ set -e
 export LANG=C.UTF-8
 export LC_ALL=C.UTF-8
 
-REPO_URL="https://github.com/Nono0325/pedestrian-safety.git"
+REPO_URL="https://github.com/Nono0325/NEW_pedestrian-safety.git"
 PROJECT_DIR="pedestrian-safety"
 
 echo "========================================================"
