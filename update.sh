@@ -49,7 +49,7 @@ if [ -z "$PROJ" ]; then
     if [ -d "$PROJECT_DIR" ]; then
         rm -rf "$PROJECT_DIR"
     fi
-    git clone "$REPO_URL"
+    git clone "$REPO_URL" "$PROJECT_DIR"
     PROJ="$HOME/$PROJECT_DIR"
 fi
 
@@ -84,7 +84,7 @@ else
     fi
     cd ..
     rm -rf "$PROJ"
-    git clone "$REPO_URL"
+    git clone "$REPO_URL" "$PROJECT_DIR"
     cd "$PROJECT_DIR"
     PROJ="$(pwd)"
     if [ -f "/tmp/config_backup.json" ]; then
