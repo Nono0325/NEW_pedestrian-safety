@@ -3,7 +3,7 @@
     {
       "id": 1,
       "name": "西側校門",
-      "ip": "192.168.1.101"
+      "ip": "192.168.50.158"
     },
     {
       "id": 2,
@@ -26,6 +26,6 @@
     "debug": false
   },
   "security": {
-    "api_key": "nono_safety_sec_2026"
+    "api_key": "1230"
   }
 }
