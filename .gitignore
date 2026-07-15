@@ -18,6 +18,8 @@ Thumbs.db
 
 # ESP32 secrets (DO NOT COMMIT)
 esp32/secrets.h
+esp32/camera_stream/secrets.h
+esp32/camera_stream/camera_pins.h
 
 # Benchmark output HTML reports (auto-generated files)
 pi5_benchmark_report.html
