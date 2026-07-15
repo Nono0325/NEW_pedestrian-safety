@@ -70,7 +70,13 @@ echo ""
 echo "[2/5] 正在從 GitHub 拉取最新版本..."
 
 if [ -d ".git" ]; then
-    # 已有 git 倉庫 → 強制更新
+    # 已有 git 倉庫 → 確保遠端 URL 指向最新 REPO_URL
+    CURRENT_REMOTE=$(git remote get-url origin 2>/dev/null || echo "")
+    if [ "$CURRENT_REMOTE" != "$REPO_URL" ]; then
+        echo "      [INFO] 偵測到遠端倉庫網址變更，正在將遠端網址更新為 $REPO_URL..."
+        git remote set-url origin "$REPO_URL"
+    fi
+    # 強制更新
     git fetch origin
     git reset --hard origin/main
     git pull origin main
