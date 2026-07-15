@@ -18,6 +18,11 @@
 const char *ssid = WIFI_SSID;
 const char *password = WIFI_PASS;
 
+// --- Static IP Config for direct connection to Pi AP ---
+IPAddress local_IP(192, 168, 4, 200);
+IPAddress gateway(192, 168, 4, 1);
+IPAddress subnet(255, 255, 255, 0);
+
 #define ALARM_PIN 12 // Moved from 13 to avoid HS2_DATA3 (SD Card) conflict
 #define FLASH_PIN 4
 
@@ -191,6 +196,16 @@ void setup() {
   Serial.println("Camera OK!");
 
   Serial.printf("Connecting to WiFi: %s\n", ssid);
+  Serial.println("Scanning WiFi networks...");
+  int n = WiFi.scanNetworks();
+  Serial.printf("Scan complete. Found %d networks:\n", n);
+  for (int i = 0; i < n; ++i) {
+    Serial.printf("  %d: %s (%d dBm)\n", i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
+    delay(10);
+  }
+  if (!WiFi.config(local_IP, gateway, subnet)) {
+    Serial.println("STA Failed to configure static IP");
+  }
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -231,6 +246,7 @@ void loop() {
   if (WiFi.status() != WL_CONNECTED) {
     Serial.println("WiFi connection lost. Reconnecting...");
     WiFi.disconnect();
+    WiFi.config(local_IP, gateway, subnet);
     WiFi.begin(ssid, password);
     unsigned long start_ms = millis();
     while (WiFi.status() != WL_CONNECTED && millis() - start_ms < 15000) {
