@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-SSID="OneStepAhead_AP"
+SSID="OneStepAhead_Pi_AP"
 PASSWORD="NonoSafety@2026"
 IP_ADDR="192.168.4.1/24"
 
