@@ -27,7 +27,7 @@ echo "  按 Ctrl+C 停止系統。"
 echo "------------------------------------------"
 echo ""
 
-venv/bin/python3 pi/dashboard.py
+PYTHONUNBUFFERED=1 venv/bin/python3 pi/dashboard.py
 
 echo ""
 echo "系統已結束。"
