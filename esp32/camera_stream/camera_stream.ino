@@ -159,18 +159,7 @@ void setup() {
   pinMode(ALARM_PIN, OUTPUT);
   digitalWrite(ALARM_PIN, LOW);
 
-  // 1. Connect to WiFi FIRST (prevents DMA overflow during wifi association/handshake)
-  Serial.printf("Connecting to WiFi: %s\n", ssid);
-  WiFi.begin(ssid, password);
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-  Serial.println("\nWiFi Connected!");
-  Serial.print("IP Address: ");
-  Serial.println(WiFi.localIP());
-
-  // 2. Initialize Camera AFTER WiFi is connected
+  // 1. Initialize Camera FIRST (guarantees clean heap for frame buffer allocation)
   camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
@@ -190,7 +179,7 @@ void setup() {
   config.pin_sscb_scl = SIOC_GPIO_NUM;
   config.pin_pwdn = PWDN_GPIO_NUM;
   config.pin_reset = RESET_GPIO_NUM;
-  config.xclk_freq_hz = 6000000;
+  config.xclk_freq_hz = 10000000;
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_QVGA; 
   config.jpeg_quality = 15; 
@@ -208,6 +197,17 @@ void setup() {
     }
   }
   Serial.println("Camera OK!");
+
+  // 2. Connect to WiFi AFTER camera is initialized (avoids heap fragmentation issues)
+  Serial.printf("Connecting to WiFi: %s\n", ssid);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi Connected!");
+  Serial.print("IP Address: ");
+  Serial.println(WiFi.localIP());
 
   // Setup mDNS Discovery
   String hostname = "esp32-safety-" + String((uint32_t)ESP.getEfuseMac(), HEX);
