@@ -159,7 +159,7 @@ void setup() {
   pinMode(ALARM_PIN, OUTPUT);
   digitalWrite(ALARM_PIN, LOW);
 
-  camera_config_t config;
+  camera_config_t config = {};
   config.ledc_channel = LEDC_CHANNEL_0;
   config.ledc_timer = LEDC_TIMER_0;
   config.pin_d0 = Y2_GPIO_NUM;
@@ -182,6 +182,8 @@ void setup() {
   config.pixel_format = PIXFORMAT_JPEG;
   config.frame_size = FRAMESIZE_QVGA; 
   config.jpeg_quality = 15; 
+  config.fb_count = 1;
+  config.fb_location = CAMERA_FB_IN_DRAM; 
   
   Serial.println("Initialzing ESP32-CAM Safety System (Optimized)...");
 
@@ -202,9 +204,6 @@ void setup() {
   for (int i = 0; i < n; ++i) {
     Serial.printf("  %d: %s (%d dBm)\n", i + 1, WiFi.SSID(i).c_str(), WiFi.RSSI(i));
     delay(10);
-  }
-  if (!WiFi.config(local_IP, gateway, subnet)) {
-    Serial.println("STA Failed to configure static IP");
   }
   WiFi.begin(ssid, password);
   while (WiFi.status() != WL_CONNECTED) {
@@ -243,19 +242,29 @@ void setup() {
 
 void loop() { 
   // Resilience: Check WiFi connectivity and reconnect if necessary
+  static int disconnect_count = 0;
+  
+  IPAddress current_IP = WiFi.localIP();
+
   if (WiFi.status() != WL_CONNECTED) {
-    Serial.println("WiFi connection lost. Reconnecting...");
-    WiFi.disconnect();
-    WiFi.config(local_IP, gateway, subnet);
-    WiFi.begin(ssid, password);
-    unsigned long start_ms = millis();
-    while (WiFi.status() != WL_CONNECTED && millis() - start_ms < 15000) {
-      delay(500);
-      Serial.print(".");
+    disconnect_count++;
+    Serial.printf("WiFi not connected (status: %d). Count: %d, IP: %s\n", 
+                  WiFi.status(), disconnect_count, current_IP.toString().c_str());
+    if (disconnect_count >= 6) { // Disconnected for 30 consecutive seconds
+      Serial.println("Reconnecting WiFi...");
+      WiFi.begin(ssid, password);
+      disconnect_count = 0;
     }
-    if (WiFi.status() == WL_CONNECTED) {
-      Serial.println("\nWiFi Restored!");
+  } else {
+    static IPAddress last_printed_IP;
+    if (current_IP != last_printed_IP) {
+      Serial.print("WiFi Connected! Active IP: ");
+      Serial.print(current_IP);
+      Serial.print(", BSSID: ");
+      Serial.println(WiFi.BSSIDstr());
+      last_printed_IP = current_IP;
     }
+    disconnect_count = 0;
   }
-  delay(10000); 
+  delay(5000); 
 }
