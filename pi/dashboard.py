@@ -621,8 +621,9 @@ async def fetch_camera_data(cam_id: int, ip: str):
 
                 reconnect_delay = 5
 
-                async with httpx.AsyncClient() as client:
-                    async with client.stream("GET", stream_url, timeout=None) as response:
+                timeout = httpx.Timeout(10.0, read=5.0)
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    async with client.stream("GET", stream_url) as response:
                         if response.status_code != 200:
                             if response.status_code == 401:
                                 add_log(f"[CAM {cam_id}] 認證失敗 (API Key 錯誤)", "ERROR")
