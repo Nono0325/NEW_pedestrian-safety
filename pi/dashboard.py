@@ -571,6 +571,19 @@ async def fetch_camera_data(cam_id: int, ip: str):
     async def poll_status():
         async with httpx.AsyncClient() as client:
             while not is_shutting_down:
+                # 若影像串流目前正處於連線/播放狀態，跳過 HTTP status 輪詢，避免 ESP32 單執行緒當機/中斷影像流
+                if cam_id in frame_cache:
+                    status_cache[cam_id] = {
+                        "rssi": status_cache.get(cam_id, {}).get("rssi", -40),
+                        "uptime": status_cache.get(cam_id, {}).get("uptime", 0) + 5,
+                        "sensor": 0.0,  # 播放中預設無來車
+                        "alarm": status_cache.get(cam_id, {}).get("alarm", 0),
+                        "tcp": "OPEN",
+                        "latency": 150
+                    }
+                    await asyncio.sleep(5)
+                    continue
+
                 start_time = asyncio.get_event_loop().time()
                 try:
                     resp = await client.get(status_url, timeout=3.0)
@@ -665,9 +678,13 @@ async def fetch_camera_data(cam_id: int, ip: str):
                                 buffer = b""
 
             except asyncio.CancelledError:
+                if cam_id in frame_cache:
+                    del frame_cache[cam_id]
                 break
             except Exception as e:
                 add_log(f"[CAM {cam_id}] 串流中斷: {str(e)[:40]}", "ERROR")
+                if cam_id in frame_cache:
+                    del frame_cache[cam_id]
                 await asyncio.sleep(5)
 
     async def run_ai():
