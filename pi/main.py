@@ -18,7 +18,7 @@ try:
         DEFAULT_TARGET_IP = config_data["cameras"][0]["ip"] if config_data.get("cameras") else "127.0.0.1:8080"
 except Exception as e:
     print(f"⚠️ [CONFIG] 無法載入設定檔，使用預設值: {e}")
-    API_KEY = "nono_safety_sec_2026"
+    API_KEY = "1230"
     DEFAULT_TARGET_IP = "127.0.0.1:8080"
 
 # Derived URLs

@@ -306,25 +306,23 @@ def get_yolo_model():
     return _yolo_model
 
 
-def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
+def _sync_ai_process(cam_id: int, jpg_bytes: bytes):
     """
     同步 AI 推論 — 在 ThreadPoolExecutor 中執行，不阻塞 Event Loop。
-    只偵測行人（classes=[0]）。
-    車輛偵測由霧爾感應器負責，在 poll_status 中處理。
-    回傳帶有偵測框的 JPEG bytes。
+    只偵測行人（classes=[0]），並將結果寫入 latest_detections 快取。
     """
     model = get_yolo_model()
     if model is None:
-        return jpg_bytes  # 無 AI 時直接回傳原始畫面
+        return
 
     frame = cv2.imdecode(np.frombuffer(jpg_bytes, np.uint8), cv2.IMREAD_COLOR)
     if frame is None:
-        return jpg_bytes
+        return
 
     tracker    = _trackers.get(cam_id)
     controller = _alarm_controllers.get(cam_id)
     if tracker is None or controller is None:
-        return jpg_bytes
+        return
 
     # 定期 tick controller（處理霍爾感測器到期邏輯）
     controller.tick()
@@ -333,14 +331,15 @@ def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
     try:
         results = model.track(
             frame, persist=True, classes=[0],
-            tracker="bytetrack.yaml", verbose=False, imgsz=320
+            tracker="bytetrack.yaml", verbose=False, imgsz=224
         )
     except Exception as e:
         print(f"[AI CAM{cam_id}] 推論錯誤: {e}")
-        return jpg_bytes
+        return
 
     person_count = 0
     any_danger   = False
+    boxes_list   = []
 
     if results[0].boxes is not None and len(results[0].boxes) > 0:
         boxes_xyxy = results[0].boxes.xyxy.cpu().numpy()
@@ -367,25 +366,74 @@ def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
             if is_danger:
                 any_danger = True
 
-            # 顏色：紅=危險行人, 綠=安全行人
-            color = (0, 0, 255) if is_danger else (0, 220, 80)
-            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-            cv2.circle(frame, (cx, cy), 5, color, -1)
             label = f"P:{track_id}" if track_id is not None else "PERSON"
             if is_danger:
                 label += " DANGER"
-            cv2.putText(frame, label, (x1, y1 - 6),
-                        cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+
+            boxes_list.append({
+                "box": (x1, y1, x2, y2),
+                "cx": cx,
+                "cy": cy,
+                "label": label,
+                "is_danger": is_danger
+            })
 
     # 將行人危險狀態同步給 controller（AND 邏輯在 controller 內部執行）
     tracker.update_danger_state(any_danger)
 
-    # ── 視覺標注：依據 controller 狀態繪製警示資訊 ──
+    # ── 更新 AI 狀態快取 ──
     vehicle_present   = controller.vehicle_present
     pedestrian_danger = controller.pedestrian_danger
     dual_alarm        = controller.alarm_active
 
-    # 紅框：同時有車 + 危險行人（雙重觸發警示中）
+    prev = ai_status_cache.get(cam_id, {})
+    ai_status_cache[cam_id] = {
+        "person_count":    person_count,
+        "vehicle_count":   prev.get("vehicle_count", 0),
+        "vehicle_present": 1 if vehicle_present else 0,
+        "vehicle_alarm":   1 if vehicle_present else 0,   # 相容舊欄位
+        "pedestrian_danger": 1 if pedestrian_danger else 0,
+        "alarm":           1 if dual_alarm else 0,
+        "ai_enabled":      True,
+    }
+
+    # ── 更新最新偵測結果快取（供畫圖使用）──
+    latest_detections[cam_id] = {
+        "boxes": boxes_list,
+        "alarm": 1 if dual_alarm else 0,
+        "vehicle_present": 1 if vehicle_present else 0,
+        "pedestrian_danger": 1 if pedestrian_danger else 0
+    }
+
+
+def draw_annotations(cam_id: int, jpg_bytes: bytes) -> bytes:
+    """
+    將最新快取的 AI 標記繪製在輸入的 JPEG 影像上並返回。
+    """
+    detections = latest_detections.get(cam_id)
+    if not detections:
+        return jpg_bytes
+
+    frame = cv2.imdecode(np.frombuffer(jpg_bytes, np.uint8), cv2.IMREAD_COLOR)
+    if frame is None:
+        return jpg_bytes
+
+    # 繪製行人框
+    for box in detections.get("boxes", []):
+        x1, y1, x2, y2 = box["box"]
+        cx, cy = box["cx"], box["cy"]
+        label = box["label"]
+        color = (0, 0, 255) if box["is_danger"] else (0, 220, 80)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+        cv2.circle(frame, (cx, cy), 5, color, -1)
+        cv2.putText(frame, label, (x1, y1 - 6),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1)
+
+    # 繪製狀態邊框與文字
+    dual_alarm        = detections.get("alarm", 0) == 1
+    vehicle_present   = detections.get("vehicle_present", 0) == 1
+    pedestrian_danger = detections.get("pedestrian_danger", 0) == 1
+
     if dual_alarm:
         cv2.rectangle(frame, (0, 0), (frame.shape[1], frame.shape[0]), (0, 0, 220), 5)
         cv2.putText(frame, "!! DUAL ALERT: VEHICLE + PEDESTRIAN !!",
@@ -403,18 +451,6 @@ def _sync_ai_process(cam_id: int, jpg_bytes: bytes) -> bytes:
         cv2.putText(frame, "PEDESTRIAN DANGER - Waiting for vehicle...",
                     (8, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (0, 200, 255), 2)
 
-    # ── 更新 AI 狀態快取 ──
-    prev = ai_status_cache.get(cam_id, {})
-    ai_status_cache[cam_id] = {
-        "person_count":    person_count,
-        "vehicle_count":   prev.get("vehicle_count", 0),
-        "vehicle_present": 1 if vehicle_present else 0,
-        "vehicle_alarm":   1 if vehicle_present else 0,   # 相容舊欄位
-        "pedestrian_danger": 1 if pedestrian_danger else 0,
-        "alarm":           1 if dual_alarm else 0,
-        "ai_enabled":      True,
-    }
-
     # 編碼回 JPEG
     success, buf = cv2.imencode('.jpg', frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     if success:
@@ -429,6 +465,7 @@ frame_cache:    dict[int, bytes] = {}   # 原始畫面 (備用)
 ai_frame_cache: dict[int, bytes] = {}   # AI 標記後的畫面
 status_cache:   dict[int, dict]  = {}
 ai_status_cache: dict[int, dict] = {}
+latest_detections: dict[int, dict] = {}
 discovered_devices: list = []
 system_logs = deque(maxlen=50)
 
@@ -571,7 +608,6 @@ async def fetch_camera_data(cam_id: int, ip: str):
 
 
     async def poll_video():
-        loop = asyncio.get_event_loop()
         reconnect_delay = 5
         frame_count = 0
         while not is_shutting_down:
@@ -614,23 +650,6 @@ async def fetch_camera_data(cam_id: int, ip: str):
                                     frame_cache[cam_id] = jpg
                                     frame_count += 1
 
-                                    # ── AI 推論（每 2 幀做一次，節省 CPU）──
-                                    if frame_count % 2 == 0:
-                                        try:
-                                            annotated = await loop.run_in_executor(
-                                                _thread_pool,
-                                                _sync_ai_process,
-                                                cam_id,
-                                                jpg
-                                            )
-                                            ai_frame_cache[cam_id] = annotated
-                                        except Exception as e:
-                                            ai_frame_cache[cam_id] = jpg
-                                    else:
-                                        # 非推論幀直接沿用上一張 AI 結果
-                                        if cam_id not in ai_frame_cache:
-                                            ai_frame_cache[cam_id] = jpg
-
                                     # 定期清理 tracker
                                     if frame_count % 200 == 0:
                                         t = _trackers.get(cam_id)
@@ -650,7 +669,30 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 add_log(f"[CAM {cam_id}] 串流中斷: {str(e)[:40]}", "ERROR")
                 await asyncio.sleep(5)
 
-    await asyncio.gather(poll_status(), poll_video())
+    async def run_ai():
+        loop = asyncio.get_event_loop()
+        last_processed_frame = None
+        while not is_shutting_down:
+            try:
+                jpg = frame_cache.get(cam_id)
+                if jpg and jpg is not last_processed_frame:
+                    last_processed_frame = jpg
+                    # 執行 AI 分析並更新最新標記座標 (跑在 ThreadPoolExecutor 避免阻塞事件循環)
+                    await loop.run_in_executor(
+                        _thread_pool,
+                        _sync_ai_process,
+                        cam_id,
+                        jpg
+                    )
+                # 為了避免無效搶佔 CPU，給予微小間隔
+                await asyncio.sleep(0.01)
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                print(f"[AI WORKER CAM{cam_id}] Error: {e}")
+                await asyncio.sleep(0.1)
+
+    await asyncio.gather(poll_status(), poll_video(), run_ai())
 
 
 active_tasks = []
@@ -795,13 +837,21 @@ async def control_led(cam_id: int, state: str):
 
 
 async def gen_frames(cam_id: int):
-    """優先輸出 AI 標記畫面，降級回原始畫面"""
+    """將最新的 AI 標記繪製在當前最新鮮的畫面上，提供平滑流暢的串流體驗"""
+    loop = asyncio.get_event_loop()
     while True:
-        frame = ai_frame_cache.get(cam_id) or frame_cache.get(cam_id)
+        frame = frame_cache.get(cam_id)
         if frame:
+            # 在執行緒池中進行快速繪圖，避免阻塞 Event Loop
+            annotated_frame = await loop.run_in_executor(
+                _thread_pool,
+                draw_annotations,
+                cam_id,
+                frame
+            )
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
-        await asyncio.sleep(1 / 20)
+                   b'Content-Type: image/jpeg\r\n\r\n' + annotated_frame + b'\r\n')
+        await asyncio.sleep(0.04) # 約 25 FPS
 
 
 @app.get("/video_feed/{cam_id}")
