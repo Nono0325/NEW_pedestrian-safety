@@ -466,6 +466,7 @@ ai_frame_cache: dict[int, bytes] = {}   # AI 標記後的畫面
 status_cache:   dict[int, dict]  = {}
 ai_status_cache: dict[int, dict] = {}
 latest_detections: dict[int, dict] = {}
+stream_active_status: dict[int, bool] = {}
 discovered_devices: list = []
 system_logs = deque(maxlen=50)
 
@@ -572,7 +573,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
         async with httpx.AsyncClient() as client:
             while not is_shutting_down:
                 # 若影像串流目前正處於連線/播放狀態，跳過 HTTP status 輪詢，避免 ESP32 單執行緒當機/中斷影像流
-                if cam_id in frame_cache:
+                if stream_active_status.get(cam_id):
                     status_cache[cam_id] = {
                         "rssi": status_cache.get(cam_id, {}).get("rssi", -40),
                         "uptime": status_cache.get(cam_id, {}).get("uptime", 0) + 5,
@@ -629,6 +630,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 is_port_open, msg = await check_tcp_port(ip, 80)
                 if not is_port_open:
                     add_log(f"[CAM {cam_id}] TCP 連線異常 ({msg})", "WARN")
+                    stream_active_status[cam_id] = False
                     await asyncio.sleep(min(reconnect_delay, 60))
                     reconnect_delay *= 2
                     continue
@@ -639,6 +641,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 async with httpx.AsyncClient(timeout=timeout) as client:
                     async with client.stream("GET", stream_url) as response:
                         if response.status_code != 200:
+                            stream_active_status[cam_id] = False
                             if response.status_code == 401:
                                 add_log(f"[CAM {cam_id}] 認證失敗 (API Key 錯誤)", "ERROR")
                             else:
@@ -646,6 +649,8 @@ async def fetch_camera_data(cam_id: int, ip: str):
                             await asyncio.sleep(10)
                             continue
 
+                        # 成功建立 TCP 影像流連結，立即將連線狀態設定為 True，阻斷對 ESP32 的 status 輪詢
+                        stream_active_status[cam_id] = True
                         add_log(f"[CAM {cam_id}] 串流建立成功", "INFO")
 
                         buffer = b""
@@ -707,6 +712,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
                                 buffer = b""
 
             except asyncio.CancelledError:
+                stream_active_status[cam_id] = False
                 if cam_id in frame_cache:
                     del frame_cache[cam_id]
                 if cam_id in ai_frame_cache:
@@ -714,6 +720,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
                 break
             except Exception as e:
                 add_log(f"[CAM {cam_id}] 串流中斷: {str(e)[:40]}", "ERROR")
+                stream_active_status[cam_id] = False
                 if cam_id in frame_cache:
                     del frame_cache[cam_id]
                 if cam_id in ai_frame_cache:
