@@ -623,6 +623,7 @@ async def fetch_camera_data(cam_id: int, ip: str):
     async def poll_video():
         reconnect_delay = 5
         frame_count = 0
+        loop = asyncio.get_event_loop()
         while not is_shutting_down:
             try:
                 is_port_open, msg = await check_tcp_port(ip, 80)
@@ -653,64 +654,73 @@ async def fetch_camera_data(cam_id: int, ip: str):
                                 break
                             buffer += chunk
 
+                            latest_jpg = None
                             while True:
                                 a = buffer.find(b'\xff\xd8')
-                                b_end = buffer.find(b'\xff\xd9')
-                                if a != -1 and b_end != -1 and b_end > a:
-                                    jpg = buffer[a:b_end + 2]
-                                    buffer = buffer[b_end + 2:]
-
-                                    # 存原始 frame 備用
-                                    frame_cache[cam_id] = jpg
-                                    frame_count += 1
-
-                                    # 定期清理 tracker
-                                    if frame_count % 200 == 0:
-                                        t = _trackers.get(cam_id)
-                                        if t:
-                                            t.cleanup_tracks()
-
-                                    await asyncio.sleep(0.001)
-                                else:
+                                if a == -1:
+                                    buffer = buffer[-1:]
                                     break
+                                b_end = buffer.find(b'\xff\xd9', a)
+                                if b_end == -1:
+                                    buffer = buffer[a:]
+                                    break
+                                latest_jpg = buffer[a:b_end + 2]
+                                buffer = buffer[b_end + 2:]
 
-                            if len(buffer) > 500000:
+                            if latest_jpg is not None:
+                                frame_cache[cam_id] = latest_jpg
+                                frame_count += 1
+
+                                # 定期清理 tracker
+                                if frame_count % 200 == 0:
+                                    t = _trackers.get(cam_id)
+                                    if t:
+                                        t.cleanup_tracks()
+
+                                # 背景執行 AI 辨識與標記繪製，避免阻塞 Event Loop 讀取
+                                if YOLO_AVAILABLE and not getattr(loop, f"ai_busy_{cam_id}", False):
+                                    setattr(loop, f"ai_busy_{cam_id}", True)
+                                    async def ai_bg_task(raw_jpg, cid):
+                                        try:
+                                            # 1. 執行 AI 偵測與決策
+                                            await loop.run_in_executor(
+                                                _thread_pool,
+                                                _sync_ai_process,
+                                                cid,
+                                                raw_jpg
+                                            )
+                                            # 2. 繪製標記並寫入 ai_frame_cache
+                                            annotated_jpg = await loop.run_in_executor(
+                                                _thread_pool,
+                                                draw_annotations,
+                                                cid,
+                                                raw_jpg
+                                            )
+                                            ai_frame_cache[cid] = annotated_jpg
+                                        except Exception as ex:
+                                            print(f"[AI BG CAM{cid}] Error: {ex}")
+                                        finally:
+                                            setattr(loop, f"ai_busy_{cid}", False)
+                                    asyncio.create_task(ai_bg_task(latest_jpg, cam_id))
+
+                            if len(buffer) > 200000:
                                 buffer = b""
 
             except asyncio.CancelledError:
                 if cam_id in frame_cache:
                     del frame_cache[cam_id]
+                if cam_id in ai_frame_cache:
+                    del ai_frame_cache[cam_id]
                 break
             except Exception as e:
                 add_log(f"[CAM {cam_id}] 串流中斷: {str(e)[:40]}", "ERROR")
                 if cam_id in frame_cache:
                     del frame_cache[cam_id]
+                if cam_id in ai_frame_cache:
+                    del ai_frame_cache[cam_id]
                 await asyncio.sleep(5)
 
-    async def run_ai():
-        loop = asyncio.get_event_loop()
-        last_processed_frame = None
-        while not is_shutting_down:
-            try:
-                jpg = frame_cache.get(cam_id)
-                if jpg and jpg is not last_processed_frame:
-                    last_processed_frame = jpg
-                    # 執行 AI 分析並更新最新標記座標 (跑在 ThreadPoolExecutor 避免阻塞事件循環)
-                    await loop.run_in_executor(
-                        _thread_pool,
-                        _sync_ai_process,
-                        cam_id,
-                        jpg
-                    )
-                # 為了避免無效搶佔 CPU，給予微小間隔
-                await asyncio.sleep(0.01)
-            except asyncio.CancelledError:
-                break
-            except Exception as e:
-                print(f"[AI WORKER CAM{cam_id}] Error: {e}")
-                await asyncio.sleep(0.1)
-
-    await asyncio.gather(poll_status(), poll_video(), run_ai())
+    await asyncio.gather(poll_status(), poll_video())
 
 
 active_tasks = []
@@ -855,20 +865,13 @@ async def control_led(cam_id: int, state: str):
 
 
 async def gen_frames(cam_id: int):
-    """將最新的 AI 標記繪製在當前最新鮮的畫面上，提供平滑流暢的串流體驗"""
-    loop = asyncio.get_event_loop()
+    """直接推送最新的畫面快取（優先使用 AI 標記畫面，無則使用原始畫面），提供平滑流暢的串流體驗"""
     while True:
-        frame = frame_cache.get(cam_id)
+        # 直接使用預先在背景執行緒中處理好的畫面，0 CPU 解碼/編碼開銷！
+        frame = ai_frame_cache.get(cam_id) or frame_cache.get(cam_id)
         if frame:
-            # 在執行緒池中進行快速繪圖，避免阻塞 Event Loop
-            annotated_frame = await loop.run_in_executor(
-                _thread_pool,
-                draw_annotations,
-                cam_id,
-                frame
-            )
             yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + annotated_frame + b'\r\n')
+                   b'Content-Type: image/jpeg\r\n\r\n' + frame + b'\r\n')
         await asyncio.sleep(0.04) # 約 25 FPS
 
 
